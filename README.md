@@ -9,7 +9,7 @@ Edit Minecraft 3DS Edition Models in 3D using this GUI.
 pip install -r requirements.txt
 ```
 
-## Modules:
+### Modules:
 ```
 matplotlib
 numpy
