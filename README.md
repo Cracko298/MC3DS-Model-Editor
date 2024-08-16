@@ -8,6 +8,8 @@ Edit Minecraft 3DS Edition Models in 3D using this GUI.
 ```
 pip install -r requirements.txt
 ```
+### Automatic Installation:
+- Run `main.py` and Watch it install everything needed for The 3D Model Editor to run/work.
 
 ### Modules:
 ```
