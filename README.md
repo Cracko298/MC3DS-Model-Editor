@@ -1,10 +1,16 @@
 # MC3DS-Model-Editor
-Edit Minecraft 3DS Edition Models in 3D using this GUI.
+- Edit Minecraft 3DS Edition Models in 3D using this GUI.
 
-
+## Features:
+- Extremely light weight for limited environments.
+- Cross-Platform, and easily usable on both Linux and Windows.
+- Edit, Modify, Add, and Redo Models using this simple GUI.
+- Bunch of Extra Tools such as Scaling, Mapping Textures, Exporting as OBJ, STL, JSON, and Text Models.
+- Intuitive and Easy-to-Use out of the box as long as python is also installed.
 
 ## Requirements
 ### Install Requirements from PowerShell:
+- Python `v3.8+`
 ```
 pip install -r requirements.txt
 ```
