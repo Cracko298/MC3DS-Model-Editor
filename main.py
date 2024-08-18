@@ -1,7 +1,7 @@
 import sys, shutil, os, random, string, json, re, time, zipfile, io
 from tkinter import ttk, messagebox, filedialog
 import tkinter as tk
-VERSION = 0.3
+VERSION = 0.31
 
 
 try:
@@ -742,9 +742,10 @@ def updateApplication():
         return
 
     if latest_version > VERSION:
-        answer = messagebox.askyesno("Update Avaliable", "An Update is Avaliable to Download.\nWould you like to download and install it?\n\nThis will require an Application restart immediately after installing.")
+        answer = messagebox.askyesno("Update Avaliable", "An Update is Avaliable to Download.\nWould you like to download and install it?\n\nThis will require an Application restart automatically after installing.\nAll unsaved Model Data will be lost.\nAll saved Model Data won't be touched.")
 
         if answer:
+            root.destroy()
             assets = response_data['assets']
             zip_url = None
             for asset in assets:
