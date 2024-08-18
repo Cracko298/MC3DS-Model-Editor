@@ -28,4 +28,5 @@ CTkMenuBar==0.4
 CTkListBox==1.3
 pygltflib==1.16.2
 numpy-stl==3.1.2
+requests==2.31.0
 ```
