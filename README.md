@@ -2,6 +2,10 @@
 ### MC3DS-3DME
 - Edit Minecraft 3DS Edition Models in 3D using this GUI.
 
+## Download:
+- You can download the Application [Here](https://github.com/Cracko298/MC3DS-3D-Model-Editor/releases/download/0.31/mc3ds-model-editor.zip).
+
+
 ## Features:
 - Extremely light weight for limited environments.
 - Cross-Platform, and easily usable on both Linux and Windows.
