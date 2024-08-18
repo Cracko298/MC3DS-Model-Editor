@@ -1,12 +1,13 @@
-import sys, shutil, os, random, string, json, re, time
+import sys, shutil, os, random, string, json, re, time, zipfile, io
 from tkinter import ttk, messagebox, filedialog
 import tkinter as tk
-VERSION = 0.2
+VERSION = 0.3
 
 
 try:
     import stl
     import numpy as np
+    import requests
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -169,8 +170,6 @@ def on_model_selected(event):
 
     object_selector.config(values=[obj.name for obj in objects])
     object_selector.set('')
-    selected_text = model_selector.get()
-    model_selector.config(width=len(selected_text)-5)
 
     draw_3d_plot(objects, canvas)
 
@@ -455,14 +454,25 @@ def openBjsonFile():
         dataFolders = os.listdir(".\\data")
         for file in dataFolders:
             os.remove(f".\\data\\{file}")
-        os.rmdir('.\\data')
-        os.remove('.\\hash_database.json')
-        with open('.\\filename.txt','r') as outf:
-            data = outf.readline()
-            os.remove(data.replace("\n",''))
-            getBaseName = os.path.basename(os.path.dirname(data))
-            os.rmdir(f"{os.path.dirname(__file__)}\\models\\{getBaseName}")
-            os.rmdir(f"{os.path.dirname(__file__)}\\models")
+        try:
+            os.rmdir('.\\data')
+            os.remove('.\\hash_database.json')
+        except FileNotFoundError:
+            pass
+
+        try:
+            with open('.\\filename.txt','r') as outf:
+                data = outf.readline()
+                os.remove(data.replace("\n",''))
+                getBaseName = os.path.basename(os.path.dirname(data))
+            
+        except FileNotFoundError:
+            pass
+            try:
+                os.rmdir(f"{os.path.dirname(__file__)}\\models\\{getBaseName}")
+                os.rmdir(f"{os.path.dirname(__file__)}\\models")
+            except FileNotFoundError:
+                pass
 
         bjson2models()
         update_model_selector()
@@ -512,93 +522,92 @@ def scale_model(factor):
             pos_entry_z.delete(0, tk.END)
             pos_entry_z.insert(0, str(obj.position[2]))
 
-def models2jsonf(answer="--json"):
-    data_dir = f"{os.path.dirname(__file__)}\\data"
+def models2jsonf(answer='--json'):
+    with open(".\\filename.txt",'r') as f0:
+        geoPath = f0.readline()
+        geoPath = geoPath.replace("\n",'')
 
-    with open('.\\filename.txt','r') as file0:
-        path = file0.readline()
-        if '\\' in path:
-            original_json_path = path.replace('\\','/')
-            if "\n" in original_json_path:
-                original_json_path = original_json_path.replace('\n','')
+    with open(geoPath, "r") as f:
+        data = json.load(f)
 
-    for filename in os.listdir(data_dir):
-        if filename.endswith(".txt") and "geometry" in filename:
-            file_path = os.path.join(data_dir, filename)
-        
-            with open(file_path, 'r') as file:
-                lines = file.readlines()
-        
-            reverted_lines = []
-            for line in lines:
-                line = re.sub(r'head\d+', 'head', line)
-                line = re.sub(r'body\d+', 'body', line)
-                reverted_lines.append(line)
-        
-            with open(file_path, 'w') as file:
-                file.writelines(reverted_lines)
+    directory = ".\\data"
+    text_files = [f for f in os.listdir(directory) if f.startswith("geometry.") and f.endswith(".txt")]
 
-    reconstructed_data = {}
+    def get_base_name_and_number(name):
+        match = re.match(r"(\D+)(\d*)", name)
+        base_name = match.group(1)
+        number = int(match.group(2)) if match.group(2) else 0
+        return base_name, number
 
-    for filename in os.listdir(data_dir):
-        if filename.endswith(".txt") and "geometry" in filename:
-            key = filename.replace(".txt", "")
-            with open(os.path.join(data_dir, filename), 'r') as file:
-                lines = file.readlines()
-        
-            bones = []
-            current_bone = None
-            current_cube = {}
-        
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    if current_bone and current_cube:
-                        current_bone["cubes"].append(current_cube)
-                    bones.append(current_bone)
-                    current_bone = None
-                    current_cube = {}
-                elif current_bone is None:
-                    current_bone = {"name": line, "cubes": []}
-                else:
-                    if not current_cube:
-                        current_cube["origin"] = [float(val) for val in line.split(", ")]
-                    else:
-                        current_cube["size"] = [float(val) for val in line.split(", ")]
-        
-            reconstructed_data[key] = {"bones": bones}
+    for text_file in text_files:
+        model_name = text_file[len("geometry."):-len(".txt")]
 
-    with open(original_json_path, 'r') as json_file:
-        original_json = json.load(json_file)
+        with open(os.path.join(directory, text_file), "r") as f:
+            lines = f.read().strip().splitlines()
 
-    for key, value in reconstructed_data.items():
-        if key in original_json:
-            original_json[key].update(value)
-        else:
-            original_json[key] = value
+        parsed_data = {}
+        current_name = None
+        for line in lines:
+            line = line.strip()
 
-    with open(original_json_path, 'w') as json_file:
-        json.dump(original_json, json_file, indent=4)
+            if not line:
+                continue
 
-    print(f"Updated data saved in {original_json_path}")
+            if re.match(r"^\w+\d*$", line):
+                current_name = line
+                parsed_data[current_name] = {}
+            elif current_name and "origin" not in parsed_data[current_name]:
+                try:
+                    parsed_data[current_name]["origin"] = list(map(float, line.split(", ")))
+                except ValueError:
+                    print(f"Skipping invalid origin line: {line}")
+            elif current_name:
+                try:
+                    parsed_data[current_name]["size"] = list(map(float, line.split(", ")))
+                except ValueError:
+                    print(f"Skipping invalid size line: {line}")
+
+        grouped_data = {}
+        for key in parsed_data:
+            base_name, number = get_base_name_and_number(key)
+            if base_name not in grouped_data:
+                grouped_data[base_name] = []
+            grouped_data[base_name].append((number, parsed_data[key]))
+
+        for base_name in grouped_data:
+            grouped_data[base_name].sort(key=lambda x: x[0])
+
+        if f"geometry.{model_name}" in data:
+            for bone in data[f"geometry.{model_name}"]["bones"]:
+                name = bone["name"]
+                if name in grouped_data:
+                    for i, (number, update_data) in enumerate(grouped_data[name]):
+                        if i < len(bone["cubes"]):
+                            bone["cubes"][i]["origin"] = update_data.get("origin", bone["cubes"][i]["origin"])
+                            bone["cubes"][i]["size"] = update_data.get("size", bone["cubes"][i]["size"])
+
+    with open(f"{os.path.dirname(geoPath)}\\geometry_updated.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"Updated data saved in {geoPath}")
 
     time.sleep(0.5)
-    filename0 = os.path.basename(original_json_path)
+    filename0 = os.path.basename(geoPath)
 
-    getbasename = os.path.basename(os.path.dirname(original_json_path))
+    getbasename = os.path.basename(os.path.dirname(geoPath))
 
     if answer == "--bjson":
         if os.path.exists(".\\hash_database.json"):
             with open(".\\hash_database.json", 'r') as f01:
                 if "JSON File Loaded, DO NOT CONVERT TO BJSON." not in f01.read():
-                    bjson.convertJsonToBjson(original_json_path)
+                    bjson.convertJsonToBjson(f"{os.path.dirname(geoPath)}\\geometry_updated.json")
                 else:
                     messagebox.showerror("Error","BJSON Model Editor ran into an Issue.\nAnd is unable to Process your Current Conversion Request.\n\nJSON Files cannot be converted into BJSON without proper BJSON Hash Keys.\n\nThese are obtained through Legit BJSON Model Files.")
                     return
 
         messagebox.showinfo("Success!", f"BJSON Model File Saved at: {os.path.dirname(__file__)}\\{filename0.replace('.json','.bjson')}")
     elif answer == "--json":
-        messagebox.showinfo("Success!", f"JSON Model File Saved at: {original_json_path}")
+        messagebox.showinfo("Success!", f"JSON Model File Saved at: {geoPath}")
         pass
     else:
         messagebox.showerror("Error","BJSON Model Editor ran into an Issue, and is unable to Process your Current Conversion Request.")
@@ -694,7 +703,6 @@ def bjson2models():
 
     json2model(main_string, directory_name, random_string, bjsonFile, directory)
 
-
 def json2modelBase():
     character = string.ascii_letters + string.digits
     random_string = ''.join(random.choice(character) for _ in range(16))
@@ -719,6 +727,57 @@ def savetojson():
 
 def savetobjson():
     models2jsonf('--bjson')
+
+def updateApplication():
+    global VERSION
+    api_url = "https://api.github.com/repos/Cracko298/MC3DS-3D-Model-Editor/releases/latest"
+    response = requests.get(api_url)
+    response_data = response.json()
+    latest_version_tag = response_data['tag_name']
+    try:
+        latest_version = float(latest_version_tag)
+    except ValueError:
+        print("Error: Latest version tag could not be converted to a float.")
+        messagebox.showerror("Error", "Newest Version of BJSON Model Editor isn't a float value.")
+        return
+
+    if latest_version > VERSION:
+        answer = messagebox.askyesno("Update Avaliable", "An Update is Avaliable to Download.\nWould you like to download and install it?\n\nThis will require an Application restart immediately after installing.")
+
+        if answer:
+            assets = response_data['assets']
+            zip_url = None
+            for asset in assets:
+                if asset['name'].endswith('.zip'):
+                    zip_url = asset['browser_download_url']
+                    break
+
+            if zip_url is None:
+                print("Error: No ZIP file found in the latest release.")
+                messagebox.showerror("Error", "No ZIP file found in the latest release.")
+                return
+            
+            zip_response = requests.get(zip_url)
+            zip_data = zip_response.content
+
+            with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+                extract_path = os.path.dirname(os.path.abspath(__file__))
+                z.extractall(extract_path)
+
+            os.system(f'python {__file__}')
+
+    if latest_version <= VERSION:
+        answer = messagebox.showinfo("Notice", "You have the Latest Release of MC3DS BJSON Model Editor.")
+        return
+
+def basicAboutDiag():
+    messagebox.showinfo("AboutDiag", f"Version: '{VERSION}'.\nHash Database Exists?: '{os.path.exists(".\\hash_database.json")}'.\nModel Cache File Exists?: '{os.path.exists(".\\filename.txt")}'.\n\nMC3DS BJSON Model Editor Developer: Cracko298.\npyBjson Python Module Developer: STBrian.")
+
+def contactsDiag():
+    messagebox.showinfo("AboutDiag", f"Personal Email: rfddfd5567@gmail.com\nBuisness Email: batchbatch298@outlook.com\n\nName: Phinehas Charles Beresford (Cracko298).")
+
+def licsenseDiag():
+    messagebox.showinfo("AboutDiag", f"Current License: 'Apache License v2.0'.\n\nPlease read the License throughly before 3rd party distrobution.")
 
 def main():
     global root, ax, canvas, objects, object_selector, pos_entry_x, pos_entry_y, pos_entry_z, dim_entry_x, dim_entry_y, dim_entry_z, model_selector
@@ -773,8 +832,13 @@ def main():
     # Options menu
     options_menu = tk.Menu(menu_bar, tearoff=0)
     menu_bar.add_cascade(label="Options", menu=options_menu)
-    options_menu.add_command(label="Show App Options", command=show_app_options)
+    options_menu.add_command(label="Update Application", command=updateApplication)
 
+    about_menu = tk.Menu(menu_bar, tearoff=0)
+    menu_bar.add_cascade(label="About", menu=about_menu)
+    about_menu.add_command(label="About", command=basicAboutDiag)
+    about_menu.add_command(label="Contact", command=contactsDiag)
+    about_menu.add_command(label="License", command=licsenseDiag)
 
     # List model files
     model_directory = os.path.join(os.getcwd(), 'data')
@@ -842,6 +906,9 @@ def main():
 
     update_button = tk.Button(control_panel, text="Update Object", command=update_object_data)
     update_button.pack(pady=10)
+
+    model_selector.config(width=20)
+    object_selector.config(width=15)
 
     root.mainloop()
 

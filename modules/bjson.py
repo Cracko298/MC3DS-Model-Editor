@@ -394,7 +394,6 @@ def addString(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list,
         htdata.append(0)
 
 def convertJsonToBjson(fp: str):
-    hash_database.save()
     hash_database = MyDatabase(".\\hash_database.json")
     filepath = Path(fp)
     with open(filepath, "r", encoding='utf-8') as f:
