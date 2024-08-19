@@ -12,6 +12,7 @@ def calculateChecksum(keyString: str):
         hash &= 0xFFFFFFFF
         hash ^= hash >> 6
         hash &= 0xFFFFFFFF
+    
     hash += hash << 3
     hash &= 0xFFFFFFFF
     hash ^= hash >> 11
@@ -28,7 +29,9 @@ def getLittleJOAAThash(text: str):
         hex_value = '0' + hash[2:]
     else:
         hex_value = hash[2:]
+    
     little_version = bytes.fromhex(hex_value)[::-1]
     if len(little_version) < 4:
         little_version = little_version + b'\0'
+    
     return little_version
