@@ -1,4 +1,3 @@
-import sys
 # From stack overflow (https://stackoverflow.com/questions/70177888/jenkins-one-at-a-time-hash-trying-to-make-python-code-reproduce-javascript-cod)
 def calculateChecksum(keyString: str):
     # Credits(modified code): Bob Jenkins (http://www.burtleburtle.net/bob/hash/doobs.html)

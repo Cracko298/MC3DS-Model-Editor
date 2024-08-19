@@ -1,7 +1,6 @@
 import json, math, sys, os
 from .conversions import *
 from pathlib import Path
-from .JOAAThash import getLittleJOAAThash
 from .updateDatabase import MyDatabase
 
 def extract_chunk(data: bytes, idx: int, size: int = 4, start_from: int = 0):

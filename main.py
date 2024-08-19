@@ -1,8 +1,8 @@
-import sys, shutil, os, random, string, json, re, time, zipfile, io
+import sys, os, random, string, json, re, time, zipfile, io
 from tkinter import ttk, messagebox, filedialog
 import tkinter as tk
-VERSION = 0.31
 
+VERSION = 0.31
 
 try:
     import stl
@@ -11,7 +11,7 @@ try:
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-    from modules import bjson, conversions, JOAAThash, updateDatabase
+    from modules import bjson
 except ImportError:
     os.system(f'pip install -r "{os.path.dirname(__file__)}\\requirements.txt"')
     messagebox.showinfo("Notice","The script has installed some python Modules.\nIt will now restart and attempt to boot.")
