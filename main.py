@@ -1,8 +1,8 @@
-import sys, shutil, os, random, string, json, re, time, zipfile, io
+import sys, os, random, string, json, re, time, zipfile, io
 from tkinter import ttk, messagebox, filedialog
 import tkinter as tk
-VERSION = 0.31
 
+VERSION = 0.31
 
 try:
     import stl
@@ -11,7 +11,7 @@ try:
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-    from modules import bjson, conversions, JOAAThash, updateDatabase
+    from modules import bjson
 except ImportError:
     os.system(f'pip install -r "{os.path.dirname(__file__)}\\requirements.txt"')
     messagebox.showinfo("Notice","The script has installed some python Modules.\nIt will now restart and attempt to boot.")
@@ -177,6 +177,7 @@ def on_model_selected(event):
 def update_object_data():
     selected_name = object_selector.get()
     obj = next((o for o in objects if o.name == selected_name), None)
+
     if obj:
         try:
             new_position = [int(float(pos_entry_x.get())), float(pos_entry_y.get()), float(pos_entry_z.get())]
@@ -280,6 +281,7 @@ def save_file():
         )
         if file_path:
             current_model_file = file_path
+
     if current_model_file:
         save_objects(objects, current_model_file)
 
@@ -382,6 +384,7 @@ def export_as_stl():
 
 def export_as_text():
     global current_model_file, objects
+    
     if not objects:
         messagebox.showerror("Export Error", "No objects to export.")
         return
@@ -404,8 +407,10 @@ def export_as_text():
 
 def openJsonFile():
     global objects, dim_entry_x, dim_entry_y, dim_entry_z, pos_entry_x, pos_entry_y, pos_entry_z, object_selector
+    
     if messagebox.askyesno("WARNING", "All Current Model Data and Information in Cache will be lost!\nAre you sure you want to Load a JSON Model File?"):
         messagebox.showinfo("Resetting Model Data", "All Model Information is being deleted now.\nThis might take a few seconds...")
+        
         dataFolders = os.listdir(".\\data")
         for file in dataFolders:
             os.remove(f".\\data\\{file}")
@@ -449,8 +454,10 @@ def openJsonFile():
 
 def openBjsonFile():
     global objects, dim_entry_x, dim_entry_y, dim_entry_z, pos_entry_x, pos_entry_y, pos_entry_z, object_selector
+    
     if messagebox.askyesno("WARNING", "All Current Model Data and Information in Cache will be lost!\nAre you sure you want to Load another BJSON Model File?"):
         messagebox.showinfo("Resetting Model Data", "All Model Information is being deleted now.\nThis might take a few seconds...")
+        
         dataFolders = os.listdir(".\\data")
         for file in dataFolders:
             os.remove(f".\\data\\{file}")
@@ -652,6 +659,7 @@ def json2model(main_string, directory_name, random_string, bjsonFile, directory=
                     output_file.write("\n".join(output_lines))
 
         print(f"Converted BJSON Data Saved: {output_directory}")
+
         with open(f'{directory}\\filename.txt','w') as outf:
             outf.write(f'{directory}\\models\\{directory_name}\\{random_string}.json\n')
             outf.write(f"{bjsonFile}")
@@ -730,6 +738,7 @@ def savetobjson():
 
 def updateApplication():
     global VERSION
+    
     api_url = "https://api.github.com/repos/Cracko298/MC3DS-3D-Model-Editor/releases/latest"
     response = requests.get(api_url)
     response_data = response.json()
