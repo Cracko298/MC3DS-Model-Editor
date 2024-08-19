@@ -1,0 +1,6 @@
+# File types
+*.zip
+*.pyc
+
+# Dirs
+__pycache__/
