@@ -13,6 +13,10 @@
 - Bunch of Extra Tools such as Scaling, Mapping Textures, Exporting as OBJ, STL, JSON, and Text Models.
 - Intuitive and Easy-to-Use out of the box as long as python is also installed.
 
+## Showcase:
+- IronBrute Download [Here](https://github.com/Cracko298/MC3DS-IronBrute).
+
+
 ## Requirements
 ### Install Requirements from PowerShell:
 - Python `v3.8+`
