@@ -9,18 +9,18 @@ def extract_chunk(data: bytes, idx: int, size: int = 4, start_from: int = 0):
 
 def getHeaders(data: bytes, hash_database: MyDatabase):
     text_region_start = (int.from_bytes(extract_chunk(data, 0), "little", signed=False) * 3 * 4) + 4
-    lenght_text_r = int.from_bytes(extract_chunk(data, 0, 4, text_region_start), "little", signed=False)
-    region_start = text_region_start + lenght_text_r + 4
+    length_text_r = int.from_bytes(extract_chunk(data, 0, 4, text_region_start), "little", signed=False)
+    region_start = text_region_start + length_text_r + 4
     pre_region_len = int.from_bytes(extract_chunk(data, 0, 4, region_start), "little", signed=False)
-    lenght = int.from_bytes(extract_chunk(data, pre_region_len + 1, 4, region_start), "little", signed=False)
+    length = int.from_bytes(extract_chunk(data, pre_region_len + 1, 4, region_start), "little", signed=False)
     #print(pre_region_len)
-    #print(lenght)
-    headers = [""] * (lenght + pre_region_len)
-    headers_text_start = region_start + (pre_region_len + 1) * 4 + (lenght) * 4 * 3 + 4
+    #print(length)
+    headers = [""] * (length + pre_region_len)
+    headers_text_start = region_start + (pre_region_len + 1) * 4 + (length) * 4 * 3 + 4
     for i in range(pre_region_len):
         idx = int.from_bytes(extract_chunk(data, i + 1, 4, region_start), "little", signed=False)
         headers[idx - 1] = None
-    for i in range(lenght):
+    for i in range(length):
         idx = pre_region_len + 1 + i * 3 + 1
         hashlist = list(extract_chunk(data, idx, 4, region_start))
         headers_idx = int.from_bytes(extract_chunk(data, idx + 1, 4, region_start), "little", signed=False)
@@ -54,7 +54,7 @@ def convertBjsonToJson(fp: str|Path):
     place_dir = []
 
     text_region_idx = int.from_bytes(extract_chunk(data_bytes, 0), "little", signed=False) * 3 + 1
-    #lenght_text_region = int.from_bytes(extract_chunk(data_bytes, text_region_idx), "little", signed=False)
+    #length_text_region = int.from_bytes(extract_chunk(data_bytes, text_region_idx), "little", signed=False)
     print("Getting headers...")
     headers = getHeaders(data_bytes, hash_database)
     #sys.exit()
