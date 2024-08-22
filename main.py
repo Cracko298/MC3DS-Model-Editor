@@ -1,23 +1,25 @@
-import sys, os, random, string, json, re, time, zipfile, io
+import sys, shutil, os, random, string, json, re, time, zipfile, io, base64, struct, subprocess
 from tkinter import ttk, messagebox, filedialog
 import tkinter as tk
-
-VERSION = 0.31
+VERSION = 0.4
 
 try:
-    import stl
+    import stl, requests, lxml, lxml.etree
     import numpy as np
-    import requests
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-    from modules import bjson
+    from modules import bjson, conversions, JOAAThash, updateDatabase
+    from pygltflib import GLTF2, Scene, Node, Mesh, Primitive, Buffer, BufferView, Accessor, Asset
+
 except ImportError:
-    os.system(f'pip install -r "{os.path.dirname(__file__)}\\requirements.txt"')
-    messagebox.showinfo("Notice","The script has installed some python Modules.\nIt will now restart and attempt to boot.")
-    time.sleep(1)
-    os.system(f'python "{os.path.dirname(__file__)}\\main.py"')
-    sys.exit(1)
+    answ = messagebox.askyesno("Notice", "The script needs to install some dependancies in order to run correctly.\nMay it install dependancies from 'requirements.txt'?")
+    if answ:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        messagebox.showinfo("Notice","The script has installed some python Modules.\nIt will now restart.")
+        time.sleep(1)
+        os.system(f'python "{__file__}"')
+        sys.exit(1)
 
 class Object3D:
     def __init__(self, name, position, dimensions):
@@ -51,37 +53,34 @@ class Object3D:
 def map_texture():
     global objects, canvas
     
-    # Ensure an object is selected
     selected_name = object_selector.get()
     if not selected_name:
         messagebox.showerror("No Selection", "Please select an object to map the texture onto.")
         return
     
-    # Load the texture file
     file_path = filedialog.askopenfilename(
         filetypes=[("PNG Image", "*.png")],
         title="Select Texture"
     )
     if not file_path:
-        return  # User canceled the operation
+        return
 
-    # Update the object to include texture info
     for obj in objects:
         if obj.name == selected_name:
             obj.texture = plt.imread(file_path)
             break
     
-    # Redraw the plot with the texture
     draw_3d_plot(objects, canvas)
 
 def draw_3d_plot(objects, canvas):
     ax.clear()
     selected_color = 'darkcyan'
     default_color = 'cyan'
-    a_val = 0.20
+    b_Val = 0.15
     tColors = 'black'
     tColorSelected = 'red'
     selectedaVal = 0.30
+    light_red = (1, 0.5, 0.5, 0.8)
 
     for obj in objects:
         corners = obj.get_corners()
@@ -97,16 +96,19 @@ def draw_3d_plot(objects, canvas):
         tColor = tColors if obj.selected else tColorSelected
         tColor = tColorSelected if obj.selected else tColors
 
-        a_val = selectedaVal if obj.selected else a_val
+        a_val = selectedaVal if obj.selected else b_Val
 
         # Check if a texture is applied
         if obj.texture is not None:
-            ax.add_collection3d(Poly3DCollection(verts, facecolors=obj.texture, linewidths=1, edgecolors='r', alpha=a_val))
+            ax.add_collection3d(Poly3DCollection(verts, facecolors=obj.texture, linewidths=1, edgecolors=light_red, alpha=a_val))
         else:
-            ax.add_collection3d(Poly3DCollection(verts, facecolors=color, linewidths=1, edgecolors='r', alpha=a_val))
+            ax.add_collection3d(Poly3DCollection(verts, facecolors=color, linewidths=1, edgecolors=light_red, alpha=a_val))
 
         center = obj.position + obj.dimensions / 1.5
-        ax.text(*center, obj.name, color=tColor)
+        if obj.selected:
+            ax.text(*center+7, obj.name, color=tColor, fontsize=8, fontweight='bold', bbox=dict(alpha=0.7))
+        else:
+            ax.text(*center, obj.name, color=tColor)
 
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
@@ -177,7 +179,6 @@ def on_model_selected(event):
 def update_object_data():
     selected_name = object_selector.get()
     obj = next((o for o in objects if o.name == selected_name), None)
-
     if obj:
         try:
             new_position = [int(float(pos_entry_x.get())), float(pos_entry_y.get()), float(pos_entry_z.get())]
@@ -281,7 +282,6 @@ def save_file():
         )
         if file_path:
             current_model_file = file_path
-
     if current_model_file:
         save_objects(objects, current_model_file)
 
@@ -384,7 +384,6 @@ def export_as_stl():
 
 def export_as_text():
     global current_model_file, objects
-    
     if not objects:
         messagebox.showerror("Export Error", "No objects to export.")
         return
@@ -407,10 +406,8 @@ def export_as_text():
 
 def openJsonFile():
     global objects, dim_entry_x, dim_entry_y, dim_entry_z, pos_entry_x, pos_entry_y, pos_entry_z, object_selector
-    
     if messagebox.askyesno("WARNING", "All Current Model Data and Information in Cache will be lost!\nAre you sure you want to Load a JSON Model File?"):
         messagebox.showinfo("Resetting Model Data", "All Model Information is being deleted now.\nThis might take a few seconds...")
-        
         dataFolders = os.listdir(".\\data")
         for file in dataFolders:
             os.remove(f".\\data\\{file}")
@@ -454,10 +451,8 @@ def openJsonFile():
 
 def openBjsonFile():
     global objects, dim_entry_x, dim_entry_y, dim_entry_z, pos_entry_x, pos_entry_y, pos_entry_z, object_selector
-    
     if messagebox.askyesno("WARNING", "All Current Model Data and Information in Cache will be lost!\nAre you sure you want to Load another BJSON Model File?"):
         messagebox.showinfo("Resetting Model Data", "All Model Information is being deleted now.\nThis might take a few seconds...")
-        
         dataFolders = os.listdir(".\\data")
         for file in dataFolders:
             os.remove(f".\\data\\{file}")
@@ -598,6 +593,27 @@ def models2jsonf(answer='--json'):
 
     print(f"Updated data saved in {geoPath}")
 
+    def convert_floats_to_ints(data):
+
+        if isinstance(data, dict):
+            return {key: convert_floats_to_ints(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [convert_floats_to_ints(item) for item in data]
+        elif isinstance(data, float) and data.is_integer():
+            return int(data)
+        else:
+            return data
+
+    def process_json_file(filename):
+        with open(filename, 'r') as file:
+            data = json.load(file)
+
+        modified_data = convert_floats_to_ints(data)
+
+        with open(filename, 'w') as file:
+            json.dump(modified_data, file, indent=4)
+
+    process_json_file(f"{os.path.dirname(geoPath)}\\geometry_updated.json")
     time.sleep(0.5)
     filename0 = os.path.basename(geoPath)
 
@@ -659,7 +675,6 @@ def json2model(main_string, directory_name, random_string, bjsonFile, directory=
                     output_file.write("\n".join(output_lines))
 
         print(f"Converted BJSON Data Saved: {output_directory}")
-
         with open(f'{directory}\\filename.txt','w') as outf:
             outf.write(f'{directory}\\models\\{directory_name}\\{random_string}.json\n')
             outf.write(f"{bjsonFile}")
@@ -736,9 +751,186 @@ def savetojson():
 def savetobjson():
     models2jsonf('--bjson')
 
+def export_as_gltf():
+    global objects, current_model_file
+    if not objects:
+        messagebox.showerror("Export Error", "No objects to export.")
+        return
+
+    gltf_file_path = filedialog.asksaveasfilename(
+        defaultextension=".gltf",
+        filetypes=[("GLTF files", "*.gltf")],
+        initialdir=os.getcwd(),
+        title="Save GLTF File"
+    )
+
+    if not gltf_file_path:
+        return
+
+    with open(current_model_file, 'r') as file:
+        data = file.read()
+
+    parts = data.strip().split("\n\n")
+    vertices = []
+    indices = []
+    index_offset = 0
+
+    for part in parts:
+        lines = part.split("\n")
+        if len(lines) < 3:
+            continue
+        position = list(map(float, lines[1].split(", ")))
+        size = list(map(float, lines[2].split(", ")))
+        x, y, z = position
+        w, h, d = size
+        vertices.extend([
+            x, y, z,
+            x + w, y, z,
+            x + w, y + h, z,
+            x, y + h, z,
+            x, y, z + d,
+            x + w, y, z + d,
+            x + w, y + h, z + d,
+            x, y + h, z + d
+        ])
+
+        indices.extend([
+            index_offset, index_offset + 2, index_offset + 1, index_offset, index_offset + 3, index_offset + 2,
+            index_offset + 4, index_offset + 5, index_offset + 6, index_offset + 4, index_offset + 6, index_offset + 7,
+            index_offset, index_offset + 4, index_offset + 7, index_offset, index_offset + 7, index_offset + 3,
+            index_offset + 1, index_offset + 2, index_offset + 6, index_offset + 1, index_offset + 6, index_offset + 5,
+            index_offset + 2, index_offset + 3, index_offset + 7, index_offset + 2, index_offset + 7, index_offset + 6,
+            index_offset, index_offset + 1, index_offset + 5, index_offset, index_offset + 5, index_offset + 4
+        ])
+        index_offset += 8
+
+    gltf = GLTF2()
+    scene = Scene()
+    gltf.scenes.append(scene)
+    gltf.scene = 0
+    node = Node()
+    gltf.nodes.append(node)
+    scene.nodes.append(0)
+    mesh = Mesh()
+    primitive = Primitive()
+    mesh.primitives.append(primitive)
+    gltf.meshes.append(mesh)
+    node.mesh = 0
+
+    vertices_bytes = struct.pack(f'{len(vertices)}f', *vertices)
+    indices_bytes = struct.pack(f'{len(indices)}I', *indices)
+
+    buffer_data = vertices_bytes + indices_bytes
+    buffer = Buffer()
+    buffer.uri = "data:application/octet-stream;base64," + base64.b64encode(buffer_data).decode('utf-8')
+    buffer.byteLength = len(buffer_data)
+    gltf.buffers.append(buffer)
+    bufferView_vertices = BufferView()
+    bufferView_vertices.buffer = 0
+    bufferView_vertices.byteOffset = 0
+    bufferView_vertices.byteLength = len(vertices_bytes)
+    gltf.bufferViews.append(bufferView_vertices)
+    bufferView_indices = BufferView()
+    bufferView_indices.buffer = 0
+    bufferView_indices.byteOffset = len(vertices_bytes)
+    bufferView_indices.byteLength = len(indices_bytes)
+    gltf.bufferViews.append(bufferView_indices)
+    accessor_vertices = Accessor()
+    accessor_vertices.bufferView = 0
+    accessor_vertices.byteOffset = 0
+    accessor_vertices.componentType = 5126
+    accessor_vertices.count = len(vertices) // 3
+    accessor_vertices.type = "VEC3"
+    gltf.accessors.append(accessor_vertices)
+    accessor_indices = Accessor()
+    accessor_indices.bufferView = 1
+    accessor_indices.byteOffset = 0
+    accessor_indices.componentType = 5125
+    accessor_indices.count = len(indices)
+    accessor_indices.type = "SCALAR"
+    gltf.accessors.append(accessor_indices)
+    primitive.attributes.POSITION = 0
+    primitive.indices = 1
+    gltf.save(gltf_file_path)
+
+def parse_input_file(filename):
+    with open(filename, 'r') as file:
+        lines = [line.strip() for line in file.readlines() if line.strip()]
+
+    data = []
+    for i in range(0, len(lines), 3):
+        name = lines[i].strip()
+        position = tuple(map(int, lines[i + 1].strip().split(', ')))
+        size = tuple(map(int, lines[i + 2].strip().split(', ')))
+        data.append((name, position, size))
+    
+    return data
+
+def export_as_ply():
+    global objects, current_model_file
+    data = parse_input_file(current_model_file)
+    if not objects:
+        messagebox.showerror("Export Error", "No objects to export.")
+        return
+
+    ply_file_path = filedialog.asksaveasfilename(
+        defaultextension=".ply",
+        filetypes=[("PLY files", "*.ply")],
+        initialdir=os.getcwd(),
+        title="Save PLY File"
+    )
+
+    if not ply_file_path:
+        return
+    
+    with open(ply_file_path, 'w') as file:
+        vertex_list = []
+        face_list = []
+        
+        for name, position, size in data:
+            x, y, z = position
+            w, h, d = size
+            
+            # Vertices
+            vertices = [
+                (x, y, z), (x + w, y, z), (x + w, y + h, z), (x, y + h, z),
+                (x, y, z + d), (x + w, y, z + d), (x + w, y + h, z + d), (x, y + h, z + d)
+            ]
+            vertex_list.extend(vertices)
+            
+            # Faces (indices)
+            start_index = len(vertex_list) - 8
+            faces = [
+                (start_index, start_index + 1, start_index + 2, start_index + 3),
+                (start_index + 4, start_index + 5, start_index + 6, start_index + 7),
+                (start_index, start_index + 1, start_index + 5, start_index + 4),
+                (start_index + 1, start_index + 2, start_index + 6, start_index + 5),
+                (start_index + 2, start_index + 3, start_index + 7, start_index + 6),
+                (start_index + 3, start_index + 0, start_index + 4, start_index + 7)
+            ]
+            face_list.extend(faces)
+        
+        # Write header
+        file.write("ply\n")
+        file.write("format ascii 1.0\n")
+        file.write(f"element vertex {len(vertex_list)}\n")
+        file.write("property float x\n")
+        file.write("property float y\n")
+        file.write("property float z\n")
+        file.write(f"element face {len(face_list)}\n")
+        file.write("property list uchar int vertex_indices\n")
+        file.write("end_header\n")
+        
+        # Write vertices
+        for vertex in vertex_list:
+            file.write(f"{vertex[0]} {vertex[1]} {vertex[2]}\n")
+        
+        # Write faces
+        for face in face_list:
+            file.write(f"4 {face[0]} {face[1]} {face[2]} {face[3]}\n")
+
 def updateApplication():
     global VERSION
-    
     api_url = "https://api.github.com/repos/Cracko298/MC3DS-3D-Model-Editor/releases/latest"
     response = requests.get(api_url)
     response_data = response.json()
@@ -789,6 +981,118 @@ def contactsDiag():
 def licsenseDiag():
     messagebox.showinfo("AboutDiag", f"Current License: 'Apache License v2.0'.\n\nPlease read the License throughly before 3rd party distrobution.")
 
+def export_as_dae():
+    global objects, current_model_file
+
+    data = parse_input_file(current_model_file)
+    if not objects:
+        messagebox.showerror("Export Error", "No objects to export.")
+        return
+
+    output_file = filedialog.asksaveasfilename(
+        defaultextension=".dae",
+        filetypes=[("DAE files", "*.dae")],
+        initialdir=os.getcwd(),
+        title="Save DAE File"
+    )
+
+    if not output_file:
+        return
+    
+    COLLADA_NS = "http://www.collada.org/2005/11/COLLADASchema"
+    ET = lxml.etree.ElementTree
+    root = lxml.etree.Element("COLLADA", xmlns=COLLADA_NS, version="1.4.1")
+
+    asset = lxml.etree.SubElement(root, "asset")
+    lxml.etree.SubElement(asset, "contributor")
+    lxml.etree.SubElement(asset, "created").text = "2024-08-18T00:00:00"
+    lxml.etree.SubElement(asset, "modified").text = "2024-08-18T00:00:00"
+    lxml.etree.SubElement(asset, "unit", name="meter", meter="1.0")
+    lxml.etree.SubElement(asset, "up_axis").text = "Y_UP"
+
+    library_geometries = lxml.etree.SubElement(root, "library_geometries")
+
+    for name, position, size in data:
+        geometry = lxml.etree.SubElement(library_geometries, "geometry", id=name, name=name)
+        mesh = lxml.etree.SubElement(geometry, "mesh")
+
+        x, y, z = position
+        w, h, d = size
+        vertices = [
+            (x, y, z), (x + w, y, z), (x + w, y + h, z), (x, y + h, z),
+            (x, y, z + d), (x + w, y, z + d), (x + w, y + h, z + d), (x, y + h, z + d)
+        ]
+        vertex_data = " ".join(f"{v[0]} {v[1]} {v[2]}" for v in vertices)
+        
+        source = lxml.etree.SubElement(mesh, "source", id=f"{name}_positions")
+        float_array = lxml.etree.SubElement(source, "float_array", id=f"{name}_positions-array", count=str(len(vertices) * 3))
+        float_array.text = vertex_data
+        
+        technique_common = lxml.etree.SubElement(source, "technique_common")
+        accessor = lxml.etree.SubElement(technique_common, "accessor", source=f"#{name}_positions-array", count="8", stride="3")
+        lxml.etree.SubElement(accessor, "param", name="X", type="float")
+        lxml.etree.SubElement(accessor, "param", name="Y", type="float")
+        lxml.etree.SubElement(accessor, "param", name="Z", type="float")
+
+        vertices_elem = lxml.etree.SubElement(mesh, "vertices", id=f"{name}_vertices")
+        lxml.etree.SubElement(vertices_elem, "input", semantic="POSITION", source=f"#{name}_positions")
+
+        triangles = lxml.etree.SubElement(mesh, "triangles", count="12")
+        lxml.etree.SubElement(triangles, "input", semantic="VERTEX", source=f"#{name}_vertices", offset="0")
+        p_elem = lxml.etree.SubElement(triangles, "p")
+        faces = [
+            (0, 1, 2), (2, 3, 0), (4, 5, 6), (6, 7, 4),
+            (0, 1, 5), (5, 4, 0), (1, 2, 6), (6, 5, 1),
+            (2, 3, 7), (7, 6, 2), (3, 0, 4), (4, 7, 3)
+        ]
+        p_elem.text = " ".join(str(index) for face in faces for index in face)
+
+    tree = ET(root)
+    tree.write(output_file, pretty_print=True, xml_declaration=True, encoding='UTF-8')
+
+def data2json():
+    global objects, current_model_file
+
+    modelFile = os.path.basename(current_model_file)
+    modelFile = modelFile.replace('.txt','')
+    
+    with open('.\\filename.txt','r') as f0:
+        firstLine = f0.readline()
+        firstLine = firstLine.replace("\n","")
+        f0.close()
+
+    getFullPath = os.path.dirname(firstLine)
+
+    if os.path.exists(f"{getFullPath}\\geometry_updated.json"):
+        firstLine = f"{getFullPath}\\geometry_updated.json"
+
+    with open(firstLine, 'r') as f1:
+        data = json.load(f1)
+
+    if modelFile in data:
+        key_data = data[modelFile]
+
+        if not objects:
+            messagebox.showerror("Export Error", "No objects to export.")
+            return
+
+        output_file = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+            initialdir=os.getcwd(),
+            title="Save JSON File"
+        )
+
+        if not output_file:
+            return
+        
+        with open(output_file, 'w') as f:
+            json.dump({modelFile: key_data}, f, indent=4)
+
+        messagebox.showinfo("Notice", f"Success! Saved JSON Model to: '{output_file}'.")
+    else:
+        messagebox.showerror("Error", f"No Model was Found inside of JSON File called '{modelFile}'.")
+
 def main():
     global root, ax, canvas, objects, object_selector, pos_entry_x, pos_entry_y, pos_entry_z, dim_entry_x, dim_entry_y, dim_entry_z, model_selector
     global current_model_file
@@ -829,6 +1133,10 @@ def main():
     export_menu = tk.Menu(tools_menu, tearoff=0)
     export_menu.add_command(label="Export as OBJ", command=export_as_obj)
     export_menu.add_command(label="Export as STL", command=export_as_stl)
+    export_menu.add_command(label="Export as PLY", command=export_as_ply)
+    export_menu.add_command(label="Export as DAE", command=export_as_dae)
+    export_menu.add_command(label="Export as GLTF", command=export_as_gltf)
+    export_menu.add_command(label="Export as JSON", command=data2json)
     export_menu.add_command(label="Export as Text", command=export_as_text)
     tools_menu.add_cascade(label="Export as Model", menu=export_menu)
 
