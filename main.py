@@ -1,7 +1,14 @@
-import sys, shutil, os, random, string, json, re, time, zipfile, io, base64, struct, subprocess
-from tkinter import ttk, messagebox, filedialog
+import sys, shutil, os, random, string, json, re, time, zipfile, io, base64, struct, subprocess, importlib
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import tkinter as tk
-VERSION = 0.4
+VERSION = 0.5
+yxFloatValue = 0.3
+zoom_factor = 0
+inZoomFactor = 0.9
+outZoomFactor = 1.1
+azimuth = 30
+elevation = 30
+increaseEandA = 5
 
 try:
     import stl, requests, lxml, lxml.etree
@@ -49,7 +56,6 @@ class Object3D:
     def reset_scale(self):  # Not used
         self.dimensions = self.original_dimensions
 
-
 def map_texture():
     global objects, canvas
     
@@ -73,7 +79,10 @@ def map_texture():
     draw_3d_plot(objects, canvas)
 
 def draw_3d_plot(objects, canvas):
+    global azimuth, elevation
     ax.clear()
+    ax.set_facecolor('darkgray')
+    ax.view_init(elevation, azimuth)
     selected_color = 'darkcyan'
     default_color = 'cyan'
     b_Val = 0.15
@@ -135,13 +144,12 @@ def draw_3d_plot(objects, canvas):
     canvas.draw()
 
 def zoom(event):
-    global ax, canvas
+    global ax, canvas, current_model_file, zoom_factor
 
-    zoom_factor = 1.05
     if event.delta > 0:
-        zoom_factor = 1 / zoom_factor
+        zoom_factor = inZoomFactor
     elif event.delta < 0:
-        zoom_factor = zoom_factor
+        zoom_factor = outZoomFactor
 
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
@@ -181,15 +189,16 @@ def update_object_data():
     obj = next((o for o in objects if o.name == selected_name), None)
     if obj:
         try:
-            new_position = [int(float(pos_entry_x.get())), float(pos_entry_y.get()), float(pos_entry_z.get())]
-            new_dimensions = [int(float(dim_entry_x.get())), float(dim_entry_y.get()), float(dim_entry_z.get())]
+            new_position = [float(pos_entry_x.get()), float(pos_entry_y.get()), float(pos_entry_z.get())]
+            new_dimensions = [float(dim_entry_x.get()), float(dim_entry_y.get()), float(dim_entry_z.get())]
 
             obj.position = np.array(new_position)
             obj.dimensions = np.array(new_dimensions)
             draw_3d_plot(objects, canvas)
             save_objects(objects, current_model_file)
         except ValueError:
-            messagebox.showerror("Invalid input", "Please enter valid Integer Numbers for position and dimensions.\nFloat Values are not Allowed.")
+            messagebox.showerror("Invalid input", "Please enter valid Ineger/Floating Point Numbers\nUsage for positions and dimensions.\n\nStrings (Non Numerical Numbers) are not Allowed.")
+            return
 
 def on_object_selected(event):
     selected_name = object_selector.get()
@@ -536,10 +545,12 @@ def models2jsonf(answer='--json'):
     text_files = [f for f in os.listdir(directory) if f.startswith("geometry.") and f.endswith(".txt")]
 
     def get_base_name_and_number(name):
-        match = re.match(r"(\D+)(\d*)", name)
-        base_name = match.group(1)
-        number = int(match.group(2)) if match.group(2) else 0
-        return base_name, number
+        # This regex will match a number at the front and then the rest of the name
+        match = re.match(r"(\d*)(\D+)", name)
+        if match:
+            number = int(match.group(1)) if match.group(1) else 0
+            base_name = match.group(2)
+            return base_name, number
 
     for text_file in text_files:
         model_name = text_file[len("geometry."):-len(".txt")]
@@ -588,19 +599,29 @@ def models2jsonf(answer='--json'):
                             bone["cubes"][i]["origin"] = update_data.get("origin", bone["cubes"][i]["origin"])
                             bone["cubes"][i]["size"] = update_data.get("size", bone["cubes"][i]["size"])
 
+                else:
+            # Handle cases where the name is unique and should not be iterated
+                   if name in parsed_data:
+                        bone["cubes"][0]["origin"] = parsed_data[name].get("origin", bone["cubes"][0]["origin"])
+                        bone["cubes"][0]["size"] = parsed_data[name].get("size", bone["cubes"][0]["size"])
+
+
+
     with open(f"{os.path.dirname(geoPath)}\\geometry_updated.json", "w") as f:
         json.dump(data, f, indent=4)
 
     print(f"Updated data saved in {geoPath}")
 
     def convert_floats_to_ints(data):
-
         if isinstance(data, dict):
             return {key: convert_floats_to_ints(value) for key, value in data.items()}
         elif isinstance(data, list):
             return [convert_floats_to_ints(item) for item in data]
-        elif isinstance(data, float) and data.is_integer():
-            return int(data)
+        elif isinstance(data, float):
+            if data.is_integer():
+                return int(data)
+            else:
+                return data
         else:
             return data
 
@@ -635,6 +656,77 @@ def models2jsonf(answer='--json'):
     else:
         messagebox.showerror("Error","BJSON Model Editor ran into an Issue, and is unable to Process your Current Conversion Request.")
         return
+
+def bodyAndHeadItterations(mode=0):
+    global current_model_file
+    directory = os.path.dirname(__file__)
+    if mode == 1:
+        file_path = f"{current_model_file}"
+        head_counter = 0
+        body_counter = 0
+        headOcc = 0
+        bodyOcc = 0
+        
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+            file.seek(0x00)
+            whole_file = file.read()
+            file.seek(0x00)
+            headOcc += whole_file.count("head")
+            file.seek(0x00)
+            bodyOcc += whole_file.count("body")
+            print(headOcc, bodyOcc)
+        
+        new_lines = []
+        for line in lines:
+            if "head" in line and headOcc > 1:
+                new_line = re.sub(r'\bhead\b', f'{head_counter}head', line)
+                head_counter += 1
+            elif "body" in line and bodyOcc > 1:
+                new_line = re.sub(r'\bbody\b', f'{body_counter}body', line)
+                body_counter += 1
+            else:
+                new_line = line
+        
+            new_lines.append(new_line)
+
+        with open(file_path, 'w') as file:
+            file.writelines(new_lines)
+
+        return
+    else:
+        for filename in os.listdir(f"{directory}\\data"):
+            if filename.endswith(".txt") and "geometry." in filename:
+                file_path = os.path.join(f"{directory}\\data", filename)
+        
+                head_counter = 0
+                body_counter = 0
+                headOcc = 0
+                bodyOcc = 0
+        
+                with open(file_path, 'r') as file:
+                    lines = file.readlines()
+                    file.seek(0x00)
+                    whole_file = file.read()
+                    headOcc += whole_file.count("head")
+                    bodyOcc += whole_file.count("body")
+                    print(headOcc, bodyOcc)
+        
+                new_lines = []
+                for line in lines:
+                    if "head" in line and headOcc > 1:
+                        new_line = re.sub(r'\bhead\b', f'{head_counter}head', line)
+                        head_counter += 1
+                    elif "body" in line and bodyOcc > 1:
+                        new_line = re.sub(r'\bbody\b', f'{body_counter}body', line)
+                        body_counter += 1
+                    else:
+                        new_line = line
+            
+                    new_lines.append(new_line)
+
+                with open(file_path, 'w') as file:
+                    file.writelines(new_lines)
 
 def json2bjsonFiles():
     jsonFile = bjson.convertJsonToBjson
@@ -680,31 +772,7 @@ def json2model(main_string, directory_name, random_string, bjsonFile, directory=
             outf.write(f"{bjsonFile}")
 
     time.sleep(0.5)
-    for filename in os.listdir(f"{directory}\\data"):
-        if filename.endswith(".txt") and "geometry" in filename:
-            file_path = os.path.join(f"{directory}\\data", filename)
-        
-            head_counter = 0
-            body_counter = 0
-        
-            with open(file_path, 'r') as file:
-                lines = file.readlines()
-        
-            new_lines = []
-            for line in lines:
-                if "head" in line:
-                    new_line = re.sub(r'\bhead\b', f'head{head_counter}', line)
-                    head_counter += 1
-                elif "body" in line:
-                    new_line = re.sub(r'\bbody\b', f'body{body_counter}', line)
-                    body_counter += 1
-                else:
-                    new_line = line
-            
-                new_lines.append(new_line)
-
-            with open(file_path, 'w') as file:
-                file.writelines(new_lines)
+    bodyAndHeadItterations()
 
 def bjson2models():
     if not os.path.exists('.\\filename.txt'):
@@ -950,8 +1018,11 @@ def updateApplication():
             assets = response_data['assets']
             zip_url = None
             for asset in assets:
-                if asset['name'].endswith('.zip'):
+                if asset['name'].endswith('.zip') and ".py" in os.path.basename(__file__):
                     zip_url = asset['browser_download_url']
+                    break
+                if asset['name'].endswith('.exe') and ".exe" in os.path.basename(__file__):
+                    exe_url = asset['browser_download_url']
                     break
 
             if zip_url is None:
@@ -959,14 +1030,32 @@ def updateApplication():
                 messagebox.showerror("Error", "No ZIP file found in the latest release.")
                 return
             
-            zip_response = requests.get(zip_url)
-            zip_data = zip_response.content
+            if ".py" in os.path.basename(__file__):
+                zip_response = requests.get(zip_url)
+                zip_data = zip_response.content
 
-            with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
-                extract_path = os.path.dirname(os.path.abspath(__file__))
-                z.extractall(extract_path)
+                with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+                    extract_path = os.path.dirname(os.path.abspath(__file__))
+                    z.extractall(extract_path)
 
-            os.system(f'python {__file__}')
+                os.system(f'python {__file__}')
+                quit_app()
+
+            else:
+                if exe_url is None:
+                    print("Error: No Executable file found in the latest release.")
+                    messagebox.showerror("Error", "No Executable file found in the latest release.")
+                    return
+                
+                exe_response = requests.get(exe_url)
+                exe_data = exe_response.content
+
+                with open(f"{os.path.dirname}\\{os.path.basename(__file__)}", 'w') as f0:
+                    f0.write(exe_data)
+                    f0.close()
+                
+                os.system(f"start {__file__}")
+                quit_app()
 
     if latest_version <= VERSION:
         answer = messagebox.showinfo("Notice", "You have the Latest Release of MC3DS BJSON Model Editor.")
@@ -1093,6 +1182,153 @@ def data2json():
     else:
         messagebox.showerror("Error", f"No Model was Found inside of JSON File called '{modelFile}'.")
 
+def rld(newFileSet):
+    model_selector['values'] = newFileSet
+
+def reloadComboBox():
+    files = os.listdir(".\\data")
+    newFileSet = []
+    for file in files:
+        if "geometry" in file and ".txt" in file:
+            newFileSet.append(file)
+
+    rld(newFileSet)
+
+def importBBmodel():
+    global objects, current_model_file
+    filename = filedialog.askopenfilename(
+        defaultextension=".bbmodel",
+        filetypes=[("BlockBench files", "*.bbmodel")],
+        initialdir=os.getcwd(),
+        title="Load BlockBench File"
+    )
+
+    if not filename:
+        return
+
+    messagebox.showinfo("Notice", "BlockBench Models are Basically Bedrock/Java Entity Models.\nJust with more information than what is theoretically needed.\nMaking them incompatible with Minecraft out of the Box.\n\nThe Application will now convert directly to Bedrock Entity.")
+    
+    with open(filename, 'r') as f0:
+        json_string = f0.read()
+        data = json.loads(json_string)
+
+    savedFileName = data['name']
+    modelName = f"geometry.{data['model_identifier']}"
+
+    print(savedFileName)
+    print(modelName)
+
+    if 'elements' in data:
+        name_count = sum(1 for element in data['elements'] if 'name' in element)
+
+    textureWidth = data['resolution']['width']
+    textureHeight = data['resolution']['height']
+    fileVersion = float(data['meta']['format_version'])
+
+    if fileVersion >= 4.31 or fileVersion < float(4):
+        messagebox.showerror("Error", "BlockBench Model Format is Greater than Expected.")
+        return
+    
+    print(textureHeight)
+    print(textureWidth)
+
+    os.makedirs(f'.\\data', exist_ok=True)
+    with open(f'.\\data\\{modelName}.txt', 'w') as f1:
+        for i in range(name_count):
+            element = data['elements'][i]
+            f1.write(f"{element['name']}\n")
+
+            # Extracting the 'from' and 'to' values
+            px, py, pz = element['from']
+
+            origin = element['from']
+            destination = element['to']
+
+            size = [destination[j] - origin[j] for j in range(3)]
+            dx, dy, dz = size
+            f1.write(f"{px}, {py}, {pz}\n{dx}, {dy}, {dz}\n\n")
+
+    bodyAndHeadItterations(1)
+
+    reloadComboBox()
+    current_model_file = f"{os.path.dirname(__file__)}\\data\\{modelName}.txt"
+    objects = read_objects_from_file(current_model_file)
+    object_selector.config(values=[obj.name for obj in objects])
+    object_selector.set(f'')
+    model_selector.set(f"{modelName}.txt")
+    draw_3d_plot(objects, canvas)
+
+def on_press(event):
+    global last_x, last_y
+    last_x, last_y = event.x, event.y
+
+def on_motion(event):
+    global last_x, last_y, yxFloatValue, elevation, azimuth
+    if last_x is not None and last_y is not None:
+        dx = event.x - last_x
+        dy = event.y - last_y
+
+        # Synchronize azimuth and elevation
+        azimuth -= dx * yxFloatValue
+        elevation += dy * yxFloatValue
+
+        # Update the view
+        ax.azim = azimuth
+        ax.elev = elevation
+        last_x, last_y = event.x, event.y
+
+        canvas.draw()
+
+def on_release(event):
+    global last_x, last_y
+    last_x, last_y = None, None
+
+def set_drag_speed():
+    global yxFloatValue
+    speed = simpledialog.askfloat("Set New Mouse Speed", "Enter Mouse-Drag Speed:", initialvalue=yxFloatValue, minvalue=0.01, maxvalue=1.0)
+    if speed is not None:
+        yxFloatValue = speed
+
+def set_zoom_speed():
+    global inZoomFactor, outZoomFactor
+    zoomMult0 = simpledialog.askfloat("Set New Zoom-In Speed", "Enter Zoom-In Speed (0.01 - 0.99):", initialvalue=inZoomFactor, minvalue=0.01, maxvalue=0.99)
+    zoomMult1 = simpledialog.askfloat("Set New Zoom-Out Speed", "Enter Zoom-Out Speed (1.01 - 9.99):", initialvalue=outZoomFactor, minvalue=1.01, maxvalue=9.99)
+    if zoomMult0 is not None:
+        inZoomFactor = zoomMult0
+    if zoomMult1 is not None:
+        outZoomFactor = zoomMult1
+
+def set_wasd_speed():
+    global increaseEandA
+    wasdSpeed = simpledialog.askfloat("Set New Arrow/WASD Speed", "Enter Arrow/WASD Speed (0.1 - 50):", initialvalue=increaseEandA, minvalue=0.1, maxvalue=50.0)
+    if wasdSpeed is not None:
+        increaseEandA = wasdSpeed
+
+def movementWASD(event):
+    global azimuth, elevation, increaseEandA
+
+    if event.key == 'w':
+        elevation += increaseEandA
+    elif event.key == 's':
+        elevation -= increaseEandA
+    elif event.key == 'a':
+        azimuth -= increaseEandA
+    elif event.key == 'd':
+        azimuth += increaseEandA
+    elif event.key == 'p':
+        elevation += increaseEandA
+    elif event.key == 'down':
+        elevation -= increaseEandA
+    elif event.key == 'left':
+        azimuth -= increaseEandA
+    elif event.key == 'right':
+        azimuth += increaseEandA
+
+    # Synchronize the ax.azim and ax.elev with azimuth and elevation
+    ax.view_init(elevation, azimuth)
+    canvas.draw()
+
+
 def main():
     global root, ax, canvas, objects, object_selector, pos_entry_x, pos_entry_y, pos_entry_z, dim_entry_x, dim_entry_y, dim_entry_z, model_selector
     global current_model_file
@@ -1112,15 +1348,15 @@ def main():
     open_menu = tk.Menu(file_menu, tearoff=0)
     file_menu.add_cascade(label="Open", menu=open_menu)
     open_menu.add_command(label="Open Text Model", command=open_file)
-    open_menu.add_command(label="Open BJSON Model", command=openBjsonFile)
     open_menu.add_command(label="Open JSON Model", command=openJsonFile)
+    open_menu.add_command(label="Open BJSON Model", command=openBjsonFile)
+    open_menu.add_command(label="Open BlockBench Model", command=importBBmodel)
 
     save_menu = tk.Menu(file_menu, tearoff=0)
     file_menu.add_cascade(label="Save", menu=save_menu)
-    save_menu.add_command(label="Save Text File", command=save_file)
-    save_menu.add_command(label="Save Text File As", command=export_as_text)
-    save_menu.add_command(label="Save To JSON", command=savetojson)
-    save_menu.add_command(label="Save To BJSON", command=savetobjson)
+    save_menu.add_command(label="Save Text Model", command=save_file)
+    save_menu.add_command(label="Save JSON Model", command=savetojson)
+    save_menu.add_command(label="Save BJSON Model", command=savetobjson)
 
     file_menu.add_separator()
     file_menu.add_command(label="Exit", command=quit_app)
@@ -1146,10 +1382,13 @@ def main():
     tools_menu.add_separator()
     tools_menu.add_command(label="Map Texture", command=map_texture)
 
-
     # Options menu
     options_menu = tk.Menu(menu_bar, tearoff=0)
     menu_bar.add_cascade(label="Options", menu=options_menu)
+    options_menu.add_command(label="Set Mouse Speed", command=set_drag_speed)
+    options_menu.add_command(label="Set Zoom Speed", command=set_zoom_speed)
+    options_menu.add_command(label="Set Arrow/WASD Speed", command=set_wasd_speed)
+    options_menu.add_separator()
     options_menu.add_command(label="Update Application", command=updateApplication)
 
     about_menu = tk.Menu(menu_bar, tearoff=0)
@@ -1171,11 +1410,18 @@ def main():
     # Load objects from the default model file
     objects = read_objects_from_file(current_model_file)
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8, 6))
+    fig.patch.set_facecolor('darkgray')
     ax = fig.add_subplot(111, projection='3d')
     canvas = FigureCanvasTkAgg(fig, master=root)
+    canvas.mpl_connect('key_press_event', movementWASD)
     canvas.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    canvas.get_tk_widget().bind_all("<MouseWheel>", zoom)
+    canvas.get_tk_widget().bind("<MouseWheel>", zoom)
+    canvas.get_tk_widget().bind("<ButtonPress-1>", on_press)
+    canvas.get_tk_widget().bind("<B1-Motion>", on_motion)
+    canvas.get_tk_widget().bind("<ButtonRelease-1>", on_release)
+    canvas.get_tk_widget().bind("<MouseWheel>", zoom)
+
     draw_3d_plot(objects, canvas)
 
     # Setting up the control panel
@@ -1222,7 +1468,7 @@ def main():
     dim_entry_z = tk.Entry(dim_frame, width=5)
     dim_entry_z.pack(side=tk.LEFT)
 
-    update_button = tk.Button(control_panel, text="Update Object", command=update_object_data)
+    update_button = tk.Button(control_panel, text="Update Text Model", command=update_object_data)
     update_button.pack(pady=10)
 
     model_selector.config(width=20)
