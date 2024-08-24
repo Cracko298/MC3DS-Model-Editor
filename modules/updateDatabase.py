@@ -20,7 +20,6 @@ class MyDatabase():
     def getValue(self, key: str) -> list:
         with open(self.filepath, "r", encoding="utf-8") as f:
             json_data = json.loads(f.read())
-        
         if key in json_data:
             return json_data[key]
         else:

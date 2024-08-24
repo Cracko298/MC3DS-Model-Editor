@@ -22,7 +22,7 @@ def bytes_to_int(bytes: bytearray, byteorder: str) -> int:
         raise ValueError(f"invalid byteorder '{byteorder}'")
 
 def float_to_bytes(num: float, byteorder: str) -> bytes:
-    # Convert number to a 32-bit float
+    # Convierte el número a formato de 32 bits de punto flotante (float)
     if byteorder == "little":
         binary_num = struct.pack('<f', num)
     elif byteorder == "big":
@@ -33,7 +33,7 @@ def float_to_bytes(num: float, byteorder: str) -> bytes:
     return binary_num
 
 def bytes_to_float(num: bytes, byteorder: str) -> float:
-    # Convert number to a 32-bit float
+    # Convierte el número a formato de 32 bits de punto flotante (float)
     if byteorder == "little":
         decimal_num = struct.unpack('<f', num)
     elif byteorder == "big":

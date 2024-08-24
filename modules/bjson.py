@@ -1,6 +1,7 @@
 import json, math, sys, os
 from .conversions import *
 from pathlib import Path
+from .JOAAThash import getLittleJOAAThash
 from .updateDatabase import MyDatabase
 
 def extract_chunk(data: bytes, idx: int, size: int = 4, start_from: int = 0):
@@ -9,20 +10,18 @@ def extract_chunk(data: bytes, idx: int, size: int = 4, start_from: int = 0):
 
 def getHeaders(data: bytes, hash_database: MyDatabase):
     text_region_start = (int.from_bytes(extract_chunk(data, 0), "little", signed=False) * 3 * 4) + 4
-    length_text_r = int.from_bytes(extract_chunk(data, 0, 4, text_region_start), "little", signed=False)
-    region_start = text_region_start + length_text_r + 4
+    lenght_text_r = int.from_bytes(extract_chunk(data, 0, 4, text_region_start), "little", signed=False)
+    region_start = text_region_start + lenght_text_r + 4
     pre_region_len = int.from_bytes(extract_chunk(data, 0, 4, region_start), "little", signed=False)
-    length = int.from_bytes(extract_chunk(data, pre_region_len + 1, 4, region_start), "little", signed=False)
+    lenght = int.from_bytes(extract_chunk(data, pre_region_len + 1, 4, region_start), "little", signed=False)
     #print(pre_region_len)
-    #print(length)
-    headers = [""] * (length + pre_region_len)
-    headers_text_start = region_start + (pre_region_len + 1) * 4 + (length) * 4 * 3 + 4
-
+    #print(lenght)
+    headers = [""] * (lenght + pre_region_len)
+    headers_text_start = region_start + (pre_region_len + 1) * 4 + (lenght) * 4 * 3 + 4
     for i in range(pre_region_len):
         idx = int.from_bytes(extract_chunk(data, i + 1, 4, region_start), "little", signed=False)
         headers[idx - 1] = None
-    
-    for i in range(length):
+    for i in range(lenght):
         idx = pre_region_len + 1 + i * 3 + 1
         hashlist = list(extract_chunk(data, idx, 4, region_start))
         headers_idx = int.from_bytes(extract_chunk(data, idx + 1, 4, region_start), "little", signed=False)
@@ -41,23 +40,21 @@ def getHeaders(data: bytes, hash_database: MyDatabase):
     return headers
 
 def convertBjsonToJson(fp: str|Path):
-    hash_database = MyDatabase(".\\hash_database.json")
-
+    hash_database = MyDatabase("hash_database.json")
     if type(fp) == str:
         filepath = Path(fp)
     elif type(fp) == Path:
         filepath = fp
     else:
         raise ValueError()
-
-    with open(f'{filepath}', "rb") as f:
+    with open(filepath, "rb") as f:
         data_bytes = f.read()
 
     json_dict = None
     place_dir = []
 
     text_region_idx = int.from_bytes(extract_chunk(data_bytes, 0), "little", signed=False) * 3 + 1
-    #length_text_region = int.from_bytes(extract_chunk(data_bytes, text_region_idx), "little", signed=False)
+    #lenght_text_region = int.from_bytes(extract_chunk(data_bytes, text_region_idx), "little", signed=False)
     print("Getting headers...")
     headers = getHeaders(data_bytes, hash_database)
     #sys.exit()
@@ -66,7 +63,6 @@ def convertBjsonToJson(fp: str|Path):
     for i in range(int.from_bytes(extract_chunk(data_bytes, 0), "little", signed=False)):
         idx = i * 3 + 1
         type_extracted = int.from_bytes(extract_chunk(data_bytes, idx), "little", signed=False)
-
         if type_extracted == 6:
             # Object data type
             if json_dict == None:
@@ -101,7 +97,6 @@ def convertBjsonToJson(fp: str|Path):
                 tmp[3] += 1
                 if tmp[3] >= tmp[2]:
                     place_dir.pop(-2)
-        
         elif type_extracted == 5:
             tmp = place_dir[-1]
             dir = tmp[0]
@@ -133,7 +128,6 @@ def convertBjsonToJson(fp: str|Path):
                 dir.append(text_decode)
                 hash_database.addToDatabase(text_decode, hashlist)
             tmp[3] += 1
-        
         elif type_extracted == 4:
             # Array data type
             if json_dict == None:
@@ -159,7 +153,6 @@ def convertBjsonToJson(fp: str|Path):
                 tmp[3] += 1
                 if tmp[3] >= tmp[2]:
                     place_dir.pop(-2)
-        
         elif type_extracted == 3:
             # Float data type
             tmp = place_dir[-1]
@@ -172,7 +165,6 @@ def convertBjsonToJson(fp: str|Path):
                 float_num = bytes_to_float(extract_chunk(data_bytes, idx + 1), "little")
                 dir.append(float("{:.2f}".format(float_num)))
             tmp[3] += 1
-        
         elif type_extracted == 2:
             # Integer data type
             tmp = place_dir[-1]
@@ -183,7 +175,6 @@ def convertBjsonToJson(fp: str|Path):
             elif tmp[1] == "list":
                 dir.append(bytes_to_int(extract_chunk(data_bytes, idx + 1), "little"))
             tmp[3] += 1
-        
         elif type_extracted == 1:
             # Boolean data type
             tmp = place_dir[-1]
@@ -202,7 +193,6 @@ def convertBjsonToJson(fp: str|Path):
                 elif bool_num == 1:
                     dir.append(True)
             tmp[3] += 1
-        
         elif type_extracted == 0:
             # None data type
             tmp = place_dir[-1]
@@ -235,24 +225,19 @@ def addObject(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list,
     end_idx = len(sdata)
     local_count = g_count
     #sdata.extend([0] * 4)
-
     if header == None and local_count != 0:
         tmp_nhdata.extend(int_to_bytes(g_count, "little"))
-    
     if header != None:
         if hashdb.getValue(header):
             self_hdata.extend(hashdb.getValue(header))
         else:
             print(f"Missing hash value for {header}")
             sys.exit()
-
         self_hdata.extend(int_to_bytes(len(htdata) - 4, "little"))
         self_hdata.extend(int_to_bytes(g_count, "little"))
         htdata.extend(header.encode("utf-8"))
         htdata.append(0)
-    
     g_count += 1
-
     for key in data:
         if type(data[key]) == bool:
             addBool(sdata, tmp_nhdata, tmp_hdata, htdata, key, data[key], g_count, hashdb=hashdb)
@@ -275,7 +260,6 @@ def addObject(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list,
         
         if type(data[key]) != dict and type(data[key]) != list:
             g_count += 1
-    
     sdata[end_idx:4] = int_to_bytes(obj_close, "little")
     obj_count = len(data)
     nhdata.extend(tmp_nhdata)
@@ -293,10 +277,8 @@ def addList(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list, h
     end_idx = len(sdata)
     #sdata.extend([0] * 4)
     local_count = g_count
-
     if header == None and local_count != 0:
         tmp_nhdata.extend(int_to_bytes(g_count, "little"))
-    
     if header != None:
         if hashdb.getValue(header):
             self_hdata.extend(hashdb.getValue(header))
@@ -307,9 +289,7 @@ def addList(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list, h
         self_hdata.extend(int_to_bytes(g_count, "little"))
         htdata.extend(header.encode("utf-8"))
         htdata.append(0)
-
     g_count += 1
-
     for key in data:
         if type(key) == bool:
             addBool(sdata, tmp_nhdata, tmp_hdata, htdata, None, key, g_count)
@@ -332,29 +312,24 @@ def addList(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list, h
 
         if type(key) != dict and type(key) != list:
             g_count += 1
-
     sdata[end_idx:4] = int_to_bytes(list_close, "little")
     list_count = len(data)
     nhdata.extend(tmp_nhdata)
     hdata.extend(tmp_hdata)
-
     return self_hdata, nhdata, hdata, g_count, obj_close, list_close + list_count
 
 def addBool(sdata: list, nhdata: list, hdata: list, htdata: list, header: str | None, value: bool, count: int, hashdb: MyDatabase = None):
     sdata.extend(int_to_bytes(1, "little"))
     sdata.extend(int_to_bytes(bool_to_int(value), "little"))
     sdata.extend(int_to_bytes(0, "little"))
-
     if header == None:
         nhdata.extend(int_to_bytes(count, "little"))
-    
     if header != None:
         if hashdb.getValue(header):
             hdata.extend(hashdb.getValue(header))
         else:
             print(f"Missing hash value for {header}")
             sys.exit()
-        
         hdata.extend(int_to_bytes(len(htdata) - 4, "little"))
         hdata.extend(int_to_bytes(count, "little"))
         htdata.extend(header.encode("utf-8"))
@@ -364,17 +339,14 @@ def addInt(sdata: list, nhdata: list, hdata: list, htdata: list, header: str | N
     sdata.extend(int_to_bytes(2, "little"))
     sdata.extend(int_to_bytes(value, "little"))
     sdata.extend(int_to_bytes(0, "little"))
-
     if header == None:
         nhdata.extend(int_to_bytes(count, "little"))
-    
     if header != None:
         if hashdb.getValue(header):
             hdata.extend(hashdb.getValue(header))
         else:
             print(f"Missing hash value for {header}")
             sys.exit()
-        
         hdata.extend(int_to_bytes(len(htdata) - 4, "little"))
         hdata.extend(int_to_bytes(count, "little"))
         htdata.extend(header.encode("utf-8"))
@@ -384,17 +356,14 @@ def addFloat(sdata: list, nhdata: list, hdata: list, htdata: list, header: str |
     sdata.extend(int_to_bytes(3, "little"))
     sdata.extend(float_to_bytes(value, "little"))
     sdata.extend(int_to_bytes(0, "little"))
-
     if header == None:
         nhdata.extend(int_to_bytes(count, "little"))
-    
     if header != None:
         if hashdb.getValue(header):
             hdata.extend(hashdb.getValue(header))
         else:
             print(f"Missing hash value for {header}")
             sys.exit()
-        
         hdata.extend(int_to_bytes(len(htdata) - 4, "little"))
         hdata.extend(int_to_bytes(count, "little"))
         htdata.extend(header.encode("utf-8"))
@@ -402,34 +371,29 @@ def addFloat(sdata: list, nhdata: list, hdata: list, htdata: list, header: str |
 
 def addString(sdata: list, tdata: list, nhdata: list, hdata: list, htdata: list, header: str | None, value: str, count: int, hashdb: MyDatabase = None):
     sdata.extend(int_to_bytes(5, "little"))
-
     if hashdb.getValue(value):
         sdata.extend(hashdb.getValue(value))
     else:
         print(f"Missing hash value for {value}")
         sys.exit()
-    
     sdata.extend(int_to_bytes(len(tdata) - 4, "little"))
     tdata.extend(value.encode('utf-8'))
     tdata.append(0)
-
     if header == None:
         nhdata.extend(int_to_bytes(count, "little"))
-    
     if header != None:
         if hashdb.getValue(header):
             hdata.extend(hashdb.getValue(header))
         else:
             print(f"Missing hash value for {header}")
             sys.exit()
-        
         hdata.extend(int_to_bytes(len(htdata) - 4, "little"))
         hdata.extend(int_to_bytes(count, "little"))
         htdata.extend(header.encode("utf-8"))
         htdata.append(0)
 
 def convertJsonToBjson(fp: str):
-    hash_database = MyDatabase(".\\hash_database.json")
+    hash_database = MyDatabase("hash_database.json")
     filepath = Path(fp)
     with open(filepath, "r", encoding='utf-8') as f:
         json_file = json.loads(f.read())
