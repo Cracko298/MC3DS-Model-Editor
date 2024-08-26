@@ -3,7 +3,7 @@
 - Edit Minecraft 3DS Edition Models in 3D using this GUI.
 
 ## Download:
-- You can download the Application [Here](https://github.com/Cracko298/MC3DS-3D-Model-Editor/releases/download/0.5/mc3ds-model-editor.zip).
+- You can download the Application [Here](https://github.com/Cracko298/MC3DS-3D-Model-Editor/releases/download/0.51/mc3ds-model-editor.zip).
 
 
 ## Features:
