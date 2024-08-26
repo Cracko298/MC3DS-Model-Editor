@@ -1,7 +1,7 @@
 import sys, shutil, os, random, string, json, re, time, zipfile, io, base64, struct, subprocess, importlib
 from tkinter import ttk, messagebox, filedialog, simpledialog
 import tkinter as tk
-VERSION = 0.5
+VERSION = 0.51
 yxFloatValue = 0.3
 zoom_factor = 0
 inZoomFactor = 0.9
@@ -542,10 +542,16 @@ def models2jsonf(answer='--json'):
         data = json.load(f)
 
     directory = ".\\data"
-    text_files = [f for f in os.listdir(directory) if f.startswith("geometry.") and f.endswith(".txt")]
+    text_files0 = [f for f in os.listdir(directory) if f.startswith("geometry.") and f.endswith(".txt")]
+    text_files = []
+    for file0 in text_files0:
+        with open(file0, 'r') as f0:
+            if len(f0.read()) > 4:
+                text_files.append(file0)
+            else:
+                pass
 
     def get_base_name_and_number(name):
-        # This regex will match a number at the front and then the rest of the name
         match = re.match(r"(\d*)(\D+)", name)
         if match:
             number = int(match.group(1)) if match.group(1) else 0
@@ -554,6 +560,8 @@ def models2jsonf(answer='--json'):
 
     for text_file in text_files:
         model_name = text_file[len("geometry."):-len(".txt")]
+        if ":" in model_name:
+            model_name.replace("_", ":")
 
         with open(os.path.join(directory, text_file), "r") as f:
             lines = f.read().strip().splitlines()
@@ -745,6 +753,8 @@ def json2model(main_string, directory_name, random_string, bjsonFile, directory=
 
         for key, value in json_data.items():
             if key.startswith("geometry.") and "bones" in value:
+                if ":" in key:
+                    key = key.replace(":", "_")
                 bones = value["bones"]
                 output_lines = []
                 for bone in bones:
@@ -928,8 +938,8 @@ def parse_input_file(filename):
     data = []
     for i in range(0, len(lines), 3):
         name = lines[i].strip()
-        position = tuple(map(int, lines[i + 1].strip().split(', ')))
-        size = tuple(map(int, lines[i + 2].strip().split(', ')))
+        position = tuple(map(float, lines[i + 1].strip().split(', ')))
+        size = tuple(map(float, lines[i + 2].strip().split(', ')))
         data.append((name, position, size))
     
     return data
@@ -1315,7 +1325,7 @@ def movementWASD(event):
         azimuth -= increaseEandA
     elif event.key == 'd':
         azimuth += increaseEandA
-    elif event.key == 'p':
+    elif event.key == 'up':
         elevation += increaseEandA
     elif event.key == 'down':
         elevation -= increaseEandA
