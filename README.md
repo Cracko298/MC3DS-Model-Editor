@@ -19,6 +19,12 @@
 - IronBrute Download [Here](https://github.com/Cracko298/MC3DS-IronBrute).
 
 
+### Credits:
+- [@Cracko298](https://github.com/Cracko298) - Main Developer.
+- [@Wolfyxon](https://github.com/Wolfyxon) - Basic and General Improvements to Code Layout.
+- [@Anonymous941/phoneticteacher](https://github.com/Anonymous941) - CDBParser aka 3DSChunker Developer and Code.
+- [@STBrian/STBUniverse](https://github.com/STBrian) - pyBjson Developer and Code.
+
 ## Requirements
 ### Install Requirements from PowerShell:
 - Python `v3.8+`
