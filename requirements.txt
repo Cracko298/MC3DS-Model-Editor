@@ -8,3 +8,7 @@ pygltflib
 numpy-stl
 requests
 lxml
+click
+dissect
+nbtlib
+pyanvileditor
