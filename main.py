@@ -1,7 +1,7 @@
 import sys, shutil, os, random, string, json, re, time, zipfile, io, base64, struct, subprocess, importlib
 from tkinter import ttk, messagebox, filedialog, simpledialog
 import tkinter as tk
-VERSION = 0.51
+VERSION = 0.6
 yxFloatValue = 0.3
 zoom_factor = 0
 inZoomFactor = 0.9
@@ -1009,7 +1009,7 @@ def export_as_ply():
 
 def updateApplication():
     global VERSION
-    api_url = "https://api.github.com/repos/Cracko298/MC3DS-3D-Model-Editor/releases/latest"
+    api_url = "https://api.github.com/repos/Cracko298/MC3DS-Model-Editor/releases/latest" # Name Change
     response = requests.get(api_url)
     response_data = response.json()
     latest_version_tag = response_data['tag_name']
@@ -1338,6 +1338,28 @@ def movementWASD(event):
     ax.view_init(elevation, azimuth)
     canvas.draw()
 
+def openCDBFile():
+    foldername = filedialog.askdirectory(
+        initialdir=os.getcwd(),
+        title="3DS World Directory"
+    )
+    if not foldername:
+        return
+    
+    nameOfFolder = os.path.basename(foldername)
+    numberOfA = nameOfFolder.count("A")
+
+    print(numberOfA)
+    if 'A=' not in nameOfFolder and numberOfA >= 3 and os.path.exists(f"{foldername}\\db\\cdb"):
+        messagebox.showerror("Error", "Invalid World Loaded.")
+        return
+    
+    os.makedirs(f"{os.path.dirname(__file__)}\\worlds", exist_ok=True)
+    os.system(f'python .\\modules\\cdbParser.py -o "{os.path.dirname(__file__)}\\worlds\\{nameOfFolder}" "{foldername}"')
+
+def disable_keyboard(event):
+    root.focus()
+    return "break"
 
 def main():
     global root, ax, canvas, objects, object_selector, pos_entry_x, pos_entry_y, pos_entry_z, dim_entry_x, dim_entry_y, dim_entry_z, model_selector
@@ -1360,6 +1382,7 @@ def main():
     open_menu.add_command(label="Open Text Model", command=open_file)
     open_menu.add_command(label="Open JSON Model", command=openJsonFile)
     open_menu.add_command(label="Open BJSON Model", command=openBjsonFile)
+    open_menu.add_command(label="Open 3DS World Folder", command=openCDBFile)
     open_menu.add_command(label="Open BlockBench Model", command=importBBmodel)
 
     save_menu = tk.Menu(file_menu, tearoff=0)
@@ -1442,16 +1465,18 @@ def main():
     model_selector_label = tk.Label(control_panel, text="Select Model:")
     model_selector_label.pack(pady=5)
 
-    model_selector = ttk.Combobox(control_panel, values=model_files)
+    model_selector = ttk.Combobox(control_panel, values=model_files, state='readonly')
     model_selector.pack(pady=5, padx=10)
+    model_selector.bind("<Key>", disable_keyboard)
     model_selector.bind("<<ComboboxSelected>>", on_model_selected)
 
     # Object selector
     object_selector_label = tk.Label(control_panel, text="Select Object:")
     object_selector_label.pack(pady=5)
 
-    object_selector = ttk.Combobox(control_panel)
+    object_selector = ttk.Combobox(control_panel, state='readonly')
     object_selector.pack(pady=5)
+    object_selector.bind("<Key>", disable_keyboard)
     object_selector.bind("<<ComboboxSelected>>", on_object_selected)
 
     pos_label = tk.Label(control_panel, text="Position (x, y, z):")
@@ -1459,6 +1484,7 @@ def main():
 
     pos_frame = tk.Frame(control_panel)
     pos_frame.pack(pady=5)
+    pos_frame.bind("<Key>", disable_keyboard)
     pos_entry_x = tk.Entry(pos_frame, width=5)
     pos_entry_x.pack(side=tk.LEFT)
     pos_entry_y = tk.Entry(pos_frame, width=5)
