@@ -34,7 +34,8 @@ pip install -r requirements.txt
 ### Automatic Installation:
 - Run `main.py` and Watch it install everything needed for The 3D Model Editor to run/work.
 
-### Modules:
+### Manually Installing Modules:
+- `pip install [moduleNameHere]`
 ```
 matplotlib
 numpy
