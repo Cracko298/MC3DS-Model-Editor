@@ -14,6 +14,8 @@
 - Edit, Modify, Add, and Redo Models using this simple GUI.
 - Bunch of Extra Tools such as Scaling, Mapping Textures, Exporting as OBJ, STL, JSON, and Text Models.
 - Intuitive and Easy-to-Use out of the box as long as python is also installed.
+- Adding New Blocks to models to create some crazy detail, or remove blocks you don't like anymore.
+- Fixed a pretty big bug with reading files themselves for horse armor and others.
 
 ## Showcase:
 - IronBrute Download [Here](https://github.com/Cracko298/MC3DS-IronBrute).
