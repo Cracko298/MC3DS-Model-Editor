@@ -1,13 +1,14 @@
 import sys, shutil, os, random, string, json, re, time, zipfile, io, base64, struct, subprocess, importlib
 from tkinter import ttk, messagebox, filedialog, simpledialog
 import tkinter as tk
-VERSION = 0.6
+VERSION = 0.7
 yxFloatValue = 0.3
 zoom_factor = 0
 inZoomFactor = 0.9
 outZoomFactor = 1.1
 azimuth = 30
 elevation = 30
+global_preview_rotation = True
 increaseEandA = 5
 
 try:
@@ -16,7 +17,7 @@ try:
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-    from modules import bjson, conversions, JOAAThash, updateDatabase
+    from modules.bjson import BJSONFile
     from pygltflib import GLTF2, Scene, Node, Mesh, Primitive, Buffer, BufferView, Accessor, Asset
 
 except ImportError:
@@ -53,7 +54,7 @@ class Object3D:
     def scale(self, scale_factor):
         self.dimensions *= scale_factor
 
-    def reset_scale(self):  # Not used
+    def reset_scale(self):
         self.dimensions = self.original_dimensions
 
 def map_texture():
@@ -107,7 +108,6 @@ def draw_3d_plot(objects, canvas):
 
         a_val = selectedaVal if obj.selected else b_Val
 
-        # Check if a texture is applied
         if obj.texture is not None:
             ax.add_collection3d(Poly3DCollection(verts, facecolors=obj.texture, linewidths=1, edgecolors=light_red, alpha=a_val))
         else:
@@ -123,7 +123,6 @@ def draw_3d_plot(objects, canvas):
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
 
-    # Calculates axis limitations
     all_positions = np.array([obj.position for obj in objects])
     all_dimensions = np.array([obj.dimensions for obj in objects])
     min_pos = np.min(all_positions, axis=0)
@@ -133,7 +132,6 @@ def draw_3d_plot(objects, canvas):
     ax.set_ylim(min_pos[1], max_pos[1])
     ax.set_zlim(min_pos[2], max_pos[2])
 
-    # Maintain the aspect ratio of original model
     max_range = np.array([max_pos[0] - min_pos[0], max_pos[1] - min_pos[1], max_pos[2] - min_pos[2]])
     max_range = max(max_range)
     mid_point = (min_pos + max_pos) / 2
@@ -215,7 +213,6 @@ def on_object_selected(event):
         pos_entry_y.insert(0, str(obj.position[1]))
         pos_entry_z.delete(0, tk.END)
         pos_entry_z.insert(0, str(obj.position[2]))
-
         dim_entry_x.delete(0, tk.END)
         dim_entry_x.insert(0, str(obj.dimensions[0]))
         dim_entry_y.delete(0, tk.END)
@@ -379,7 +376,6 @@ def export_as_stl():
                 [vertices[2], vertices[3], vertices[0]],
             ])
 
-        # Create the STL file
         faces = np.array(faces)
         stl_mesh = stl.mesh.Mesh(np.zeros(faces.shape[0], dtype=stl.mesh.Mesh.dtype))
         for i, face in enumerate(faces):
@@ -545,7 +541,7 @@ def models2jsonf(answer='--json'):
     text_files0 = [f for f in os.listdir(directory) if f.startswith("geometry.") and f.endswith(".txt")]
     text_files = []
     for file0 in text_files0:
-        with open(file0, 'r') as f0:
+        with open(f"{directory}\\{file0}", 'r') as f0:
             if len(f0.read()) > 4:
                 text_files.append(file0)
             else:
@@ -608,7 +604,6 @@ def models2jsonf(answer='--json'):
                             bone["cubes"][i]["size"] = update_data.get("size", bone["cubes"][i]["size"])
 
                 else:
-            # Handle cases where the name is unique and should not be iterated
                    if name in parsed_data:
                         bone["cubes"][0]["origin"] = parsed_data[name].get("origin", bone["cubes"][0]["origin"])
                         bone["cubes"][0]["size"] = parsed_data[name].get("size", bone["cubes"][0]["size"])
@@ -645,14 +640,19 @@ def models2jsonf(answer='--json'):
     process_json_file(f"{os.path.dirname(geoPath)}\\geometry_updated.json")
     time.sleep(0.5)
     filename0 = os.path.basename(geoPath)
-
     getbasename = os.path.basename(os.path.dirname(geoPath))
 
     if answer == "--bjson":
         if os.path.exists(".\\hash_database.json"):
             with open(".\\hash_database.json", 'r') as f01:
                 if "JSON File Loaded, DO NOT CONVERT TO BJSON." not in f01.read():
-                    bjson.convertJsonToBjson(f"{os.path.dirname(geoPath)}\\geometry_updated.json")
+                    with open(f"{os.path.dirname(geoPath)}\\geometry_updated.json", 'r', encoding="utf-8") as f:
+                        json_str = f.read()
+                
+                    bjson_file = BJSONFile()
+                    bjson_file.fromJson(json_str)
+                    with open(filename0.replace('.json','.bjson'), 'wb') as f:
+                        f.write(bjson_file.getData())
                 else:
                     messagebox.showerror("Error","BJSON Model Editor ran into an Issue.\nAnd is unable to Process your Current Conversion Request.\n\nJSON Files cannot be converted into BJSON without proper BJSON Hash Keys.\n\nThese are obtained through Legit BJSON Model Files.")
                     return
@@ -736,9 +736,6 @@ def bodyAndHeadItterations(mode=0):
                 with open(file_path, 'w') as file:
                     file.writelines(new_lines)
 
-def json2bjsonFiles():
-    jsonFile = bjson.convertJsonToBjson
-
 def json2model(main_string, directory_name, random_string, bjsonFile, directory=os.path.dirname(__file__)):
     if '"size": [' not in main_string:
         messagebox.showerror('Error',"The Provided JSON/BJSON File was Not a Model.")
@@ -787,7 +784,7 @@ def json2model(main_string, directory_name, random_string, bjsonFile, directory=
 def bjson2models():
     if not os.path.exists('.\\filename.txt'):
         messagebox.showinfo("Welcome", f"Welcome to the MC3DS BJSON Model Editor!\nYou can now edit MC3DS Models easier than ever.\n\nVersion: v{VERSION}.0\nDeveloped by: Cracko298.")
-    
+
     character = string.ascii_letters + string.digits
     random_string = ''.join(random.choice(character) for _ in range(16))
     directory = os.path.dirname(__file__)
@@ -798,11 +795,13 @@ def bjson2models():
 
     file_name0 = os.path.basename(bjsonFile)
     directory_name = file_name0.replace('.bjson','')
-    os.makedirs(f"{directory}\\models\\{directory_name}",exist_ok=True)
+    os.makedirs(f"{directory}\\models\\{directory_name}", exist_ok=True)
 
-    main_string = bjson.convertBjsonToJson(bjsonFile)
+    bjsonfileOpen = BJSONFile().open(bjsonFile)
+    main_string = bjsonfileOpen.toJson(showDebug=False)
 
     json2model(main_string, directory_name, random_string, bjsonFile, directory)
+
 
 def json2modelBase():
     character = string.ascii_letters + string.digits
@@ -969,14 +968,12 @@ def export_as_ply():
             x, y, z = position
             w, h, d = size
             
-            # Vertices
             vertices = [
                 (x, y, z), (x + w, y, z), (x + w, y + h, z), (x, y + h, z),
                 (x, y, z + d), (x + w, y, z + d), (x + w, y + h, z + d), (x, y + h, z + d)
             ]
             vertex_list.extend(vertices)
             
-            # Faces (indices)
             start_index = len(vertex_list) - 8
             faces = [
                 (start_index, start_index + 1, start_index + 2, start_index + 3),
@@ -988,7 +985,6 @@ def export_as_ply():
             ]
             face_list.extend(faces)
         
-        # Write header
         file.write("ply\n")
         file.write("format ascii 1.0\n")
         file.write(f"element vertex {len(vertex_list)}\n")
@@ -999,17 +995,15 @@ def export_as_ply():
         file.write("property list uchar int vertex_indices\n")
         file.write("end_header\n")
         
-        # Write vertices
         for vertex in vertex_list:
             file.write(f"{vertex[0]} {vertex[1]} {vertex[2]}\n")
         
-        # Write faces
         for face in face_list:
             file.write(f"4 {face[0]} {face[1]} {face[2]} {face[3]}\n")
 
 def updateApplication():
     global VERSION
-    api_url = "https://api.github.com/repos/Cracko298/MC3DS-Model-Editor/releases/latest" # Name Change
+    api_url = "https://api.github.com/repos/Cracko298/MC3DS-Model-Editor/releases/latest"
     response = requests.get(api_url)
     response_data = response.json()
     latest_version_tag = response_data['tag_name']
@@ -1217,14 +1211,12 @@ def importBBmodel():
         return
 
     messagebox.showinfo("Notice", "BlockBench Models are Basically Bedrock/Java Entity Models.\nJust with more information than what is theoretically needed.\nMaking them incompatible with Minecraft out of the Box.\n\nThe Application will now convert directly to Bedrock Entity.")
-    
     with open(filename, 'r') as f0:
         json_string = f0.read()
         data = json.loads(json_string)
 
     savedFileName = data['name']
     modelName = f"geometry.{data['model_identifier']}"
-
     print(savedFileName)
     print(modelName)
 
@@ -1234,7 +1226,6 @@ def importBBmodel():
     textureWidth = data['resolution']['width']
     textureHeight = data['resolution']['height']
     fileVersion = float(data['meta']['format_version'])
-
     if fileVersion >= 4.31 or fileVersion < float(4):
         messagebox.showerror("Error", "BlockBench Model Format is Greater than Expected.")
         return
@@ -1247,13 +1238,9 @@ def importBBmodel():
         for i in range(name_count):
             element = data['elements'][i]
             f1.write(f"{element['name']}\n")
-
-            # Extracting the 'from' and 'to' values
             px, py, pz = element['from']
-
             origin = element['from']
             destination = element['to']
-
             size = [destination[j] - origin[j] for j in range(3)]
             dx, dy, dz = size
             f1.write(f"{px}, {py}, {pz}\n{dx}, {dy}, {dz}\n\n")
@@ -1277,16 +1264,11 @@ def on_motion(event):
     if last_x is not None and last_y is not None:
         dx = event.x - last_x
         dy = event.y - last_y
-
-        # Synchronize azimuth and elevation
         azimuth -= dx * yxFloatValue
         elevation += dy * yxFloatValue
-
-        # Update the view
         ax.azim = azimuth
         ax.elev = elevation
         last_x, last_y = event.x, event.y
-
         canvas.draw()
 
 def on_release(event):
@@ -1334,7 +1316,6 @@ def movementWASD(event):
     elif event.key == 'right':
         azimuth += increaseEandA
 
-    # Synchronize the ax.azim and ax.elev with azimuth and elevation
     ax.view_init(elevation, azimuth)
     canvas.draw()
 
@@ -1361,10 +1342,271 @@ def disable_keyboard(event):
     root.focus()
     return "break"
 
+def toggle_preview_rotation():
+    global global_preview_rotation
+    global_preview_rotation = not global_preview_rotation
+
+def add_new_block():
+    global current_model_file, objects
+    if not current_model_file:
+        messagebox.showerror("Error", "No model file currently open.")
+        return
+
+    with open(current_model_file, 'r') as file:
+        lines = file.readlines()
+        existing_names = [lines[i].strip() for i in range(0, len(lines), 4)]
+
+    base_names = set()
+    for name in existing_names:
+        if name[0].isdigit() or name[-1].isdigit():
+            continue
+        if any(char.isdigit() for char in name):
+            continue
+        base_names.add(name)
+
+    if not base_names:
+        messagebox.showerror("Error", "No valid block types found in file.\nNames with numbers are excluded.")
+        return
+
+    dialog = tk.Toplevel()
+    dialog.title("Add New Block")
+    dialog.geometry("750x500")
+    dialog.resizable(False, False)
+    dialog.transient()
+    dialog.grab_set()
+    left_frame = ttk.Frame(dialog)
+    left_frame.pack(side=tk.LEFT, padx=10, pady=10, fill="y")
+    right_frame = ttk.Frame(dialog)
+    right_frame.pack(side=tk.RIGHT, padx=10, pady=10, fill="both", expand=True)
+    preview_fig = plt.figure(figsize=(7.5, 5))
+    preview_fig.patch.set_facecolor('darkgray')
+    preview_ax = preview_fig.add_subplot(111, projection='3d')
+    preview_canvas = FigureCanvasTkAgg(preview_fig, master=right_frame)
+    preview_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+    preview_fig.canvas.callbacks.callbacks.clear()
+    preview_canvas.mpl_disconnect(preview_canvas.get_tk_widget().bind('<Button-1>'))
+    preview_canvas.mpl_disconnect(preview_canvas.get_tk_widget().bind('<B1-Motion>'))
+    preview_canvas.mpl_disconnect(preview_canvas.get_tk_widget().bind('<ButtonRelease-1>'))
+    preview_canvas.mpl_disconnect(preview_canvas.get_tk_widget().bind('<MouseWheel>'))
+    preview_canvas.get_tk_widget().unbind_all('<Key>')
+    preview_ax.set_position([0, 0, 1, 1])
+    preview_ax.set_axis_off()
+    rotation_angle = 0
+    animation_id = None
+    last_values = {'pos': None, 'size': None}
+    def update_preview():
+        nonlocal rotation_angle, animation_id, last_values
+        try:
+            current_pos = [float(pos_x.get()), float(pos_y.get()), float(pos_z.get())]
+            current_size = [float(size_x.get()), float(size_y.get()), float(size_z.get())]
+            preview_ax.clear()
+            preview_ax.set_facecolor('darkgray')
+            preview_obj = Object3D("preview", current_pos, current_size)
+            corners = preview_obj.get_corners()
+            verts = [
+                [corners[0], corners[1], corners[5], corners[4]],
+                [corners[7], corners[6], corners[2], corners[3]],
+                [corners[0], corners[3], corners[7], corners[4]],
+                [corners[1], corners[2], corners[6], corners[5]],
+                [corners[0], corners[1], corners[2], corners[3]],
+                [corners[4], corners[5], corners[6], corners[7]],
+            ]
+        
+            preview_ax.add_collection3d(Poly3DCollection(verts, facecolors='cyan', 
+                                                   linewidths=1, edgecolors='red', alpha=0.15))
+        
+            if global_preview_rotation:
+                rotation_angle = (rotation_angle + 2) % 360
+
+            preview_ax.view_init(elev=30, azim=rotation_angle)
+            max_dim = max(current_size)
+            center = np.array(current_pos) + np.array(current_size) / 2
+            margin = max_dim * 0.5
+            preview_ax.set_xlim(center[0] - max_dim - margin, center[0] + max_dim + margin)
+            preview_ax.set_ylim(center[1] - max_dim - margin, center[1] + max_dim + margin)
+            preview_ax.set_zlim(center[2] - max_dim - margin, center[2] + max_dim + margin)
+            preview_canvas.draw()
+            animation_id = dialog.after(50, update_preview)
+        
+        except ValueError:
+            animation_id = dialog.after(50, update_preview)
+
+    tk.Label(left_frame, text="Block Type:").pack(pady=5)
+    block_type = ttk.Combobox(left_frame, values=sorted(list(base_names)), state="readonly")
+    block_type.set(sorted(list(base_names))[0])
+    block_type.pack(pady=5)
+    name_order_frame = ttk.LabelFrame(left_frame)
+    name_order_frame.pack(pady=5)
+    name_order_var = tk.BooleanVar(value=True)
+    name_order_check = ttk.Checkbutton(
+        name_order_frame, 
+        text="Make Seperate Body Part", 
+        variable=name_order_var
+    )
+    name_order_check.pack()
+
+    def on_value_change(*args):
+        if animation_id:
+            dialog.after_cancel(animation_id)
+        update_preview()
+
+    pos_frame = ttk.LabelFrame(left_frame, text="Position")
+    pos_frame.pack(pady=10, padx=10, fill="x")
+    pos_x = tk.StringVar(value="0")
+    pos_y = tk.StringVar(value="0")
+    pos_z = tk.StringVar(value="0")
+    pos_x.trace_add("write", on_value_change)
+    pos_y.trace_add("write", on_value_change)
+    pos_z.trace_add("write", on_value_change)
+    tk.Label(pos_frame, text="X:").grid(row=0, column=0, padx=5, pady=5)
+    tk.Entry(pos_frame, textvariable=pos_x, width=10).grid(row=0, column=1, padx=5, pady=5)
+    tk.Label(pos_frame, text="Y:").grid(row=0, column=2, padx=5, pady=5)
+    tk.Entry(pos_frame, textvariable=pos_y, width=10).grid(row=0, column=3, padx=5, pady=5)
+    tk.Label(pos_frame, text="Z:").grid(row=0, column=4, padx=5, pady=5)
+    tk.Entry(pos_frame, textvariable=pos_z, width=10).grid(row=0, column=5, padx=5, pady=5)
+    size_frame = ttk.LabelFrame(left_frame, text="Size")
+    size_frame.pack(pady=10, padx=10, fill="x")
+    size_x = tk.StringVar(value="3")
+    size_y = tk.StringVar(value="3")
+    size_z = tk.StringVar(value="3")
+    size_x.trace_add("write", on_value_change)
+    size_y.trace_add("write", on_value_change)
+    size_z.trace_add("write", on_value_change)
+    tk.Label(size_frame, text="X:").grid(row=0, column=0, padx=5, pady=5)
+    tk.Entry(size_frame, textvariable=size_x, width=10).grid(row=0, column=1, padx=5, pady=5)
+    tk.Label(size_frame, text="Y:").grid(row=0, column=2, padx=5, pady=5)
+    tk.Entry(size_frame, textvariable=size_y, width=10).grid(row=0, column=3, padx=5, pady=5)
+    tk.Label(size_frame, text="Z:").grid(row=0, column=4, padx=5, pady=5)
+    tk.Entry(size_frame, textvariable=size_z, width=10).grid(row=0, column=5, padx=5, pady=5)
+    def validate_and_create():
+        try:
+            pos = [float(pos_x.get()), float(pos_y.get()), float(pos_z.get())]
+            size = [float(size_x.get()), float(size_y.get()), float(size_z.get())]
+            base_name = block_type.get()
+            counter = 0
+            if not name_order_var.get():
+                new_name = f"{counter}{base_name}"
+                while new_name in existing_names:
+                    counter += 1
+                    new_name = f"{counter}{base_name}"
+            else:
+                new_name = f"{base_name}{counter}"
+                while new_name in existing_names:
+                    counter += 1
+                    new_name = f"{base_name}{counter}"
+
+            with open(current_model_file, 'r') as file:
+                content = file.read()
+                
+            if content and not content.endswith('\n\n'):
+                if content.endswith('\n'):
+                    prefix = '\n'
+                else:
+                    prefix = '\n\n'
+            else:
+                prefix = ''
+                
+            new_block = [
+                f"{prefix}{new_name}\n",
+                f"{pos[0]}, {pos[1]}, {pos[2]}\n",
+                f"{size[0]}, {size[1]}, {size[2]}\n\n"
+            ]
+
+            with open(current_model_file, 'a') as file:
+                file.writelines(new_block)
+
+            global objects
+            objects = read_objects_from_file(current_model_file)
+            object_selector.config(values=[obj.name for obj in objects])
+            draw_3d_plot(objects, canvas)
+            if animation_id:
+                dialog.after_cancel(animation_id)
+
+            dialog.destroy()
+
+        except ValueError:
+            messagebox.showerror("Error", "Invalid input values. Please enter valid numbers.")
+
+    def on_dialog_close():
+        if animation_id:
+            dialog.after_cancel(animation_id)
+        dialog.destroy()
+
+    button_frame = ttk.Frame(left_frame)
+    button_frame.pack(pady=20)
+    ttk.Button(button_frame, text="Create", command=validate_and_create).pack(side=tk.LEFT, padx=10)
+    ttk.Button(button_frame, text="Cancel", command=on_dialog_close).pack(side=tk.LEFT, padx=10)
+    try:
+        last_values['pos'] = [float(pos_x.get()), float(pos_y.get()), float(pos_z.get())]
+        last_values['size'] = [float(size_x.get()), float(size_y.get()), float(size_z.get())]
+    except ValueError:
+        last_values['pos'] = [0, 0, 0]
+        last_values['size'] = [3, 3, 3]
+
+    update_preview()
+    dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
+
+def remove_block():
+    global objects
+    if not objects:
+        messagebox.showerror("Error", "No objects available to remove.")
+        return
+
+    dialog = tk.Toplevel()
+    dialog.title("Remove Block")
+    dialog.geometry("300x150")
+    dialog.resizable(False, False)
+    dialog.transient()
+    dialog.grab_set()
+    tk.Label(dialog, text="Select Block to Remove:").pack(pady=10)
+    block_selector = ttk.Combobox(dialog, values=[obj.name for obj in objects], state="readonly")
+    block_selector.pack(pady=5)
+
+    def confirm_removal():
+        selected_name = block_selector.get()
+        if not selected_name:
+            messagebox.showerror("Error", "Please select a block to remove.")
+            return
+        
+        if not messagebox.askyesno("Confirm Deletion", f"Are you sure you want to remove '{selected_name}'?"):
+            return
+
+        try:
+            with open(current_model_file, 'r') as file:
+                lines = file.readlines()
+
+            new_lines = []
+            i = 0
+            while i < len(lines):
+                if lines[i].strip() == selected_name:
+                    i += 4
+                else:
+                    new_lines.append(lines[i])
+                    i += 1
+
+            with open(current_model_file, 'w') as file:
+                file.writelines(new_lines)
+
+            global objects
+            objects = read_objects_from_file(current_model_file)
+            object_selector.config(values=[obj.name for obj in objects])
+            object_selector.set('')
+            draw_3d_plot(objects, canvas)
+            messagebox.showinfo("Success", f"Block '{selected_name}' has been removed.")
+            dialog.destroy()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to remove block: {str(e)}")
+
+    button_frame = ttk.Frame(dialog)
+    button_frame.pack(pady=20, fill="x")
+    tk.Button(button_frame, text="Remove", command=confirm_removal).pack(side="left", padx=10, expand=True)
+    tk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side="right", padx=10, expand=True)
+    dialog.wait_window()
+
 def main():
     global root, ax, canvas, objects, object_selector, pos_entry_x, pos_entry_y, pos_entry_z, dim_entry_x, dim_entry_y, dim_entry_z, model_selector
     global current_model_file
-
     root = tk.Tk()
     root.title("BJSON Model Editor")
     root.protocol("WM_DELETE_WINDOW", quit_app)
@@ -1373,10 +1615,8 @@ def main():
 
     menu_bar = tk.Menu(root)
     root.config(menu=menu_bar)
-
     file_menu = tk.Menu(menu_bar, tearoff=0)
     menu_bar.add_cascade(label="File", menu=file_menu)
-
     open_menu = tk.Menu(file_menu, tearoff=0)
     file_menu.add_cascade(label="Open", menu=open_menu)
     open_menu.add_command(label="Open Text Model", command=open_file)
@@ -1384,13 +1624,11 @@ def main():
     open_menu.add_command(label="Open BJSON Model", command=openBjsonFile)
     open_menu.add_command(label="Open 3DS World Folder", command=openCDBFile)
     open_menu.add_command(label="Open BlockBench Model", command=importBBmodel)
-
     save_menu = tk.Menu(file_menu, tearoff=0)
     file_menu.add_cascade(label="Save", menu=save_menu)
     save_menu.add_command(label="Save Text Model", command=save_file)
     save_menu.add_command(label="Save JSON Model", command=savetojson)
     save_menu.add_command(label="Save BJSON Model", command=savetobjson)
-
     file_menu.add_separator()
     file_menu.add_command(label="Exit", command=quit_app)
 
@@ -1398,7 +1636,6 @@ def main():
     tools_menu = tk.Menu(menu_bar, tearoff=0)
     menu_bar.add_cascade(label="Tools", menu=tools_menu)
     scaling_menu = tk.Menu(tools_menu, tearoff=0)
-
     export_menu = tk.Menu(tools_menu, tearoff=0)
     export_menu.add_command(label="Export as OBJ", command=export_as_obj)
     export_menu.add_command(label="Export as STL", command=export_as_stl)
@@ -1408,12 +1645,13 @@ def main():
     export_menu.add_command(label="Export as JSON", command=data2json)
     export_menu.add_command(label="Export as Text", command=export_as_text)
     tools_menu.add_cascade(label="Export as Model", menu=export_menu)
-
     tools_menu.add_cascade(label="Scaling", menu=scaling_menu)
     scaling_menu.add_command(label="Scale Up (2.0x)", command=lambda: scale_model(2))
     scaling_menu.add_command(label="Scale Down (0.5x)", command=lambda: scale_model(0.5))
     tools_menu.add_separator()
     tools_menu.add_command(label="Map Texture", command=map_texture)
+    tools_menu.add_command(label="Add New Block", command=add_new_block)
+    tools_menu.add_command(label="Remove Block", command=remove_block)
 
     # Options menu
     options_menu = tk.Menu(menu_bar, tearoff=0)
@@ -1421,16 +1659,17 @@ def main():
     options_menu.add_command(label="Set Mouse Speed", command=set_drag_speed)
     options_menu.add_command(label="Set Zoom Speed", command=set_zoom_speed)
     options_menu.add_command(label="Set Arrow/WASD Speed", command=set_wasd_speed)
+    preview_rotation_var = tk.BooleanVar(value=True)
+    options_menu.add_checkbutton(label="Preview Rotation", 
+                            variable=preview_rotation_var,
+                            command=toggle_preview_rotation)
     options_menu.add_separator()
     options_menu.add_command(label="Update Application", command=updateApplication)
-
     about_menu = tk.Menu(menu_bar, tearoff=0)
     menu_bar.add_cascade(label="About", menu=about_menu)
     about_menu.add_command(label="About", command=basicAboutDiag)
     about_menu.add_command(label="Contact", command=contactsDiag)
     about_menu.add_command(label="License", command=licsenseDiag)
-
-    # List model files
     model_directory = os.path.join(os.getcwd(), 'data')
     model_files = list_model_files(model_directory)
 
@@ -1439,10 +1678,7 @@ def main():
         sys.exit()
 
     current_model_file = os.path.join(model_directory, model_files[0])
-
-    # Load objects from the default model file
     objects = read_objects_from_file(current_model_file)
-
     fig = plt.figure(figsize=(8, 6))
     fig.patch.set_facecolor('darkgray')
     ax = fig.add_subplot(111, projection='3d')
@@ -1454,17 +1690,13 @@ def main():
     canvas.get_tk_widget().bind("<B1-Motion>", on_motion)
     canvas.get_tk_widget().bind("<ButtonRelease-1>", on_release)
     canvas.get_tk_widget().bind("<MouseWheel>", zoom)
-
     draw_3d_plot(objects, canvas)
-
-    # Setting up the control panel
     control_panel = tk.Frame(root)
     control_panel.pack(side=tk.RIGHT, fill=tk.Y)
 
     # Model selector
     model_selector_label = tk.Label(control_panel, text="Select Model:")
     model_selector_label.pack(pady=5)
-
     model_selector = ttk.Combobox(control_panel, values=model_files, state='readonly')
     model_selector.pack(pady=5, padx=10)
     model_selector.bind("<Key>", disable_keyboard)
@@ -1473,15 +1705,12 @@ def main():
     # Object selector
     object_selector_label = tk.Label(control_panel, text="Select Object:")
     object_selector_label.pack(pady=5)
-
     object_selector = ttk.Combobox(control_panel, state='readonly')
     object_selector.pack(pady=5)
     object_selector.bind("<Key>", disable_keyboard)
     object_selector.bind("<<ComboboxSelected>>", on_object_selected)
-
     pos_label = tk.Label(control_panel, text="Position (x, y, z):")
     pos_label.pack(pady=5)
-
     pos_frame = tk.Frame(control_panel)
     pos_frame.pack(pady=5)
     pos_frame.bind("<Key>", disable_keyboard)
@@ -1491,10 +1720,8 @@ def main():
     pos_entry_y.pack(side=tk.LEFT)
     pos_entry_z = tk.Entry(pos_frame, width=5)
     pos_entry_z.pack(side=tk.LEFT)
-
     dim_label = tk.Label(control_panel, text="Dimensions (dx, dy, dz):")
     dim_label.pack(pady=5)
-
     dim_frame = tk.Frame(control_panel)
     dim_frame.pack(pady=5)
     dim_entry_x = tk.Entry(dim_frame, width=5)
@@ -1503,13 +1730,10 @@ def main():
     dim_entry_y.pack(side=tk.LEFT)
     dim_entry_z = tk.Entry(dim_frame, width=5)
     dim_entry_z.pack(side=tk.LEFT)
-
     update_button = tk.Button(control_panel, text="Update Text Model", command=update_object_data)
     update_button.pack(pady=10)
-
     model_selector.config(width=20)
     object_selector.config(width=15)
-
     root.mainloop()
 
 if __name__ == "__main__":
