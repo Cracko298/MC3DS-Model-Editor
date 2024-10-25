@@ -36,6 +36,7 @@ class Object3D:
         self.dimensions = np.array(dimensions)
         self.selected = False
         self.texture = None
+        self.texture_coords = None
 
     def get_corners(self):
         x, y, z = self.position
@@ -72,12 +73,31 @@ def map_texture():
     if not file_path:
         return
 
-    for obj in objects:
-        if obj.name == selected_name:
-            obj.texture = plt.imread(file_path)
-            break
-    
-    draw_3d_plot(objects, canvas)
+    try:
+        # Load the texture image and normalize it
+        texture_img = plt.imread(file_path)
+        if texture_img.dtype == np.uint8:
+            texture_img = texture_img.astype(np.float32) / 255.0
+
+        for obj in objects:
+            if obj.name == selected_name:
+                obj.texture = texture_img
+                # Create texture coordinates for each face
+                obj.texture_coords = {
+                    'front': [(0, 0), (1, 0), (1, 1), (0, 1)],
+                    'back': [(0, 0), (1, 0), (1, 1), (0, 1)],
+                    'top': [(0, 0), (1, 0), (1, 1), (0, 1)],
+                    'bottom': [(0, 0), (1, 0), (1, 1), (0, 1)],
+                    'left': [(0, 0), (1, 0), (1, 1), (0, 1)],
+                    'right': [(0, 0), (1, 0), (1, 1), (0, 1)]
+                }
+                break
+
+        # Update the display
+        draw_3d_plot(objects, canvas)
+        
+    except Exception as e:
+        messagebox.showerror("Texture Error", f"Failed to load texture: {str(e)}")
 
 def draw_3d_plot(objects, canvas):
     global azimuth, elevation
