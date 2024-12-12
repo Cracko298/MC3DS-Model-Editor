@@ -53,3 +53,9 @@ dissect
 nbtlib
 pyanvileditor
 ```
+### Similar Application(s):
+- [Minecraft3DS-AnimationSuite](https://github.com/Cracko298/MC3DS-AnimationSuite)
+- [CombinedAudioTool (CATool)](https://github.com/Cracko298/CombinedAudioTool)
+- [Minecraft3DS-TextureMaker](https://github.com/STBrian/MC3DS-Texture-Maker)
+- [Minecraft3DS-BJSONEditor](https://github.com/STBrian/MC3DS-BJSON-Editor)
+- [Minecraft3DS-Chunker](https://github.com/MC3DS-Save-Research/3DS-Chunker)
